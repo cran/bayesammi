@@ -4,7 +4,9 @@
 \name{Maiz}
 \alias{Maiz}
 \title{Data for Genotypes by Environment Interaction (GEI)}
-\format{A \code{data.frame} 1320 obs. of  6 variables.}
+\format{
+A \code{data.frame} 1320 obs. of  6 variables.
+}
 \usage{
 data(Maiz)
 }
@@ -29,7 +31,7 @@ data(Maiz)
 Crossa, J., Perez-Elizalde, S., Jarquin, D., Cotes, J.M., Viele, K., Liu, G., and Cornelius, P.L. (2011)
  Bayesian Estimation of the Additive Main Effects and Multiplicative Interaction Model
  \emph{Crop Science}, \strong{51}, 1458–1469.
- (\href{https://dl.sciencesocieties.org/publications/cs/abstracts/51/4/1458?access=0&view=pdf}{doi: 10.2135/cropsci2010.06.0343})
+ (\href{https://acsess.onlinelibrary.wiley.com/doi/abs/10.2135/cropsci2010.06.0343}{doi: 10.2135/cropsci2010.06.0343})
 }
 \author{
 \enumerate{

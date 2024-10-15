@@ -1,0 +1,17 @@
+bibentry(
+  "manual",
+  header = "Please, support this project by citing it in your publications!",
+  title = "bayesammi: Bayesian Estimation of the Additive Main Effects and Multiplicative Interaction Model",
+	author = c(
+	           person(c("Muhammad"), "Yaseen")
+	         , person(c("Jose"), "Crossa")
+	         , person(c("Sergio"), "Perez-Elizalde")
+	         , person(c("Diego"), "Jarquin")
+	         , person(c("Jose", "Miguel"), "Cotes")
+	         , person(c("Kert"), "Viele")
+	         , person(c("Genzhou"), "Liu")
+	         , person(c("Paul", "L."), "Cornelius")
+	         ),
+  year = 2018,
+  journal = "The Comprehensive R Archive Network (CRAN)"
+)
