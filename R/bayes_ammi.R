@@ -263,23 +263,29 @@
 #' print(BiplotBayesAMMI)
 #'
 #'
-# if(getRversion() >= "2.15.1"){
-#   utils::globalVariables(
-#     c(
-#       "alphas0"
-#       , "c0"
-#       , "delta0"
-#       , "gammas0"
-#       , "lambdas0"
-#       , "ge_means0"
-#       , "mu0"
-#       , "n0"
-#       , "tao0"
-#       , "tau0"
-#     )
-#   )
-# }
-#
+if(getRversion() >= "2.15.1"){
+  utils::globalVariables(
+    c(
+      "alphas0"
+      , "c0"
+      , "delta0"
+      , "gammas0"
+      , "lambdas0"
+      , "ge_means0"
+      , "mu0"
+      , "n0"
+      , "tao0"
+      , "tau0"
+        , "prob"
+        , "byplot"
+        , "ID"
+        , "x"
+        , "y"
+        , "stable"
+        , "name"
+    )
+  )
+}
 
 
 bayes_ammi <- function(.data, .y, .gen, .env, .rep, .nIter){
@@ -476,8 +482,11 @@ fm1   <-
     tao1     <-  cbind(tao1, tao)
     delta1   <-  cbind(delta1, delta)
     lambdas1 <-  cbind(lambdas1, lambdas)
-    alphas1  <-  matrix(alphas2, ncol = k, byrow = TRUE)
-    gammas1  <-  matrix(gammas2, ncol = k, byrow = TRUE)
+    alphas1  <-  rbind(alphas1, alphas2)
+    gammas1  <-  rbind(gammas1, gammas2)
+
+    # alphas1  <-  matrix(alphas2, ncol = k, byrow = TRUE)
+    # gammas1  <-  matrix(gammas2, ncol = k, byrow = TRUE)
 
      times   <- times + 1
      }
@@ -487,16 +496,39 @@ fm1   <-
     tao1     <-  tibble::as_tibble(t(tao1))
     delta1   <-  tibble::as_tibble(t(delta1))
     lambdas1 <-  tibble::as_tibble(t(lambdas1))
-    alphas1  <-  tibble::as_tibble(alphas1)
-    gammas1  <-  tibble::as_tibble(gammas1)
+    # alphas1  <-  tibble::as_tibble(alphas1)
+    # gammas1  <-  tibble::as_tibble(gammas1)
+    alphas1  <-  do.call(
+                  rbind,
+                  lapply(1:nrow(alphas1), function(i) {
+                    matrix_row <- matrix(as.numeric(alphas1[i, ]), ncol = k, byrow = TRUE)
+                    cbind(
+                       .nIter = rep(i, nrow(matrix_row))
+                      , Gen = rep(1:g, times = .nIter)
+                      , matrix_row
+                      )
+                  })
+                )
+    gammas1  <-  do.call(
+                  rbind,
+                  lapply(1:nrow(gammas1), function(i) {
+                    matrix_row <- matrix(as.numeric(gammas1[i, ]), ncol = k, byrow = TRUE)
+                    cbind(
+                        .nIter = rep(i, nrow(matrix_row))
+                      , Env = rep(1:e, times = .nIter)
+                      , matrix_row
+                      )
+                  })
+                )
+
 
     colnames(mu1)      <- c("mu")
     colnames(tau1)     <- c("tau")
     colnames(tao1)     <- paste0("tao", 1:g)
     colnames(delta1)   <- paste0("delta", 1:e)
     colnames(lambdas1) <- paste0("lambdas", 1:k)
-    colnames(alphas1)  <- paste0("alphas", 1:k)
-    colnames(gammas1)  <- paste0("gammas", 1:k)
+    colnames(alphas1)  <- c(".nIter", "Gen", paste0("alphas", 1:k))
+    colnames(gammas1)  <- c(".nIter", "Env", paste0("gammas", 1:k))
 
     alphas0  <-  tibble::as_tibble(alphas0)
     gammas0  <-  tibble::as_tibble(gammas0)

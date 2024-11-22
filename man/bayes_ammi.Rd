@@ -5,8 +5,6 @@
 \alias{bayes_ammi.default}
 \title{Bayesian Estimation of the Additive Main Effects and Multiplicative Interaction Model}
 \usage{
-bayes_ammi(.data, .y, .gen, .env, .rep, .nIter)
-
 \method{bayes_ammi}{default}(.data, .y, .gen, .env, .rep, .nIter)
 }
 \arguments{
