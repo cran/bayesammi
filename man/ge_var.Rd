@@ -3,45 +3,50 @@
 \name{ge_var}
 \alias{ge_var}
 \alias{ge_var.default}
-\title{Genotype by Environment Interaction Variances}
+\title{Genotype-by-environment variances}
 \usage{
+ge_var(.data, .y, .gen, .env)
+
 \method{ge_var}{default}(.data, .y, .gen, .env)
 }
 \arguments{
-\item{.data}{data.frame}
+\item{.data}{a data frame with one row per plot.}
 
-\item{.y}{Response Variable}
-
-\item{.gen}{Genotypes Factor}
-
-\item{.env}{Environment Factor}
+\item{.y, .gen, .env}{the columns of the response, genotypes and environments: bare names, strings or vectors.}
 }
 \value{
-Genotype by Environment Interaction Variances
+A list (class \code{c("bam_ge_var", "bam_result", "list")}) with \code{ge_variances}, the \eqn{G \times
+  E}{G x E} matrix of variances.
 }
 \description{
-Calcuates Genotype by Environment Interaction Variances
+\code{ge_var()} computes the variance of the replicates of every genotype-by-environment cell.
+}
+\details{
+\deqn{s^2_{ij} = \frac{1}{n_{ij} - 1}\sum_l (y_{ijl} - \bar{y}_{ij})^2,}{s2_ij = sum_l (y_ijl - y_ij)^2 / (n_ij -
+  1),}
+\code{NA} for a cell with one replicate. The within-cell sum of squares of the Bayesian AMMI model is
+\eqn{\sum_{ij}(n_{ij} - 1)s^2_{ij}}{sum_ij (n_ij - 1) s2_ij}.
+
+\strong{Change from the earlier versions.} \code{bayes_ammi()} used the sum of these variances in place of the
+within-cell sum of squares.
 }
 \examples{
-
 data(Maiz)
 ge_var(
-    .data  = Maiz
-   , .y    = y
-   , .gen  = entry
-   , .env  = site
-   )
-
-
+    .data = Maiz
+  , .y    = y
+  , .gen  = entry
+  , .env  = site
+  )
 }
 \references{
-Crossa, J., Perez-Elizalde, S., Jarquin, D., Cotes, J.M., Viele, K., Liu, G., and Cornelius, P.L. (2011)
- Bayesian Estimation of the Additive Main Effects and Multiplicative Interaction Model
- \emph{Crop Science}, \strong{51}, 1458–1469.
- (\href{https://acsess.onlinelibrary.wiley.com/doi/abs/10.2135/cropsci2010.06.0343}{doi: 10.2135/cropsci2010.06.0343})
+Crossa, J., Perez-Elizalde, S., Jarquin, D., Cotes, J. M., Viele, K., Liu, G. and Cornelius, P. L. (2011).
+Bayesian estimation of the additive main effects and multiplicative interaction model. \emph{Crop Science},
+\strong{51}(4), 1458--1469. \doi{10.2135/cropsci2010.06.0343}
+}
+\seealso{
+\code{\link{ge_mean}}
 }
 \author{
-\enumerate{
-    \item Muhammad Yaseen (\email{myaseen208@gmail.com})
-   }
+Muhammad Yaseen (\email{myaseen208@gmail.com})
 }

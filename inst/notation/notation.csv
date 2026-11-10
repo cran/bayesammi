@@ -1,0 +1,30 @@
+symbol,text,kind,meaning,argument
+"G",G,scalar,"number of genotypes",.gen
+"E",E,scalar,"number of environments",.env
+"B",B,scalar,"number of replicates in each environment (largest number of plots in a cell when unbalanced)",.rep
+"K",K,scalar,"number of bilinear terms",.k
+"n",n,scalar,"number of observations BGE",
+"i, j, l, k",i j l k,index,"genotype, environment, replicate, bilinear term",
+"\mathbf{Y} = (\bar{y}_{ij})",Y,matrix,"table of genotype-by-environment means",.y
+"\mu",mu,scalar,"overall mean",
+"\boldsymbol{\tau} = (\tau_i)",tau,vector,"genotype main effects (sum zero)",
+"\boldsymbol{\delta} = (\delta_j)",delta,vector,"environment main effects (sum zero)",
+"\lambda_k",lambda_k,scalar,"singular value of bilinear term k",
+"\boldsymbol{\alpha}_k, \boldsymbol{\gamma}_k",alpha_k gamma_k,vector,"genotype and environment score vectors of term k (unit length)",
+"\sigma^2",sigma^2,scalar,"error variance",
+"\sigma^2_j",sigma_j^2,scalar,"error variance of environment j (.het = TRUE)",.het
+"\eta_{ij}",eta_ij,scalar,"expected value of genotype i in environment j",
+"g_i, h_j",g_i h_j,scalar,"genotype effect and environmental index of the stability models",
+"1 + b_i",1 + b_i,scalar,"slope of genotype i on the environmental index",
+"d_{ij}",d_ij,scalar,"deviation of genotype i from its regression in environment j",
+"\sigma^2_{d,i}",sigma_d_i^2,scalar,"deviation (Eberhart-Russell) or stability (Shukla) variance of genotype i",.model
+"W_i, P_i, I_i",W_i P_i I_i,scalar,"Wricke's ecovalence, Lin and Binns' superiority, Annicchiarico's reliability",
+"\theta_k",theta_k,scalar,"share of term k in the fitted interaction (Za, WAAS)",
+"n_{ij}",n_ij,scalar,"number of observed plots of genotype i in environment j",
+"S",S,scalar,"number of kept posterior draws",.nIter
+"\mathrm{DIC}, \mathrm{WAIC}",DIC WAIC,scalar,"deviance and widely applicable information criteria",.waic
+"\mathbf{K}_n",K_n,matrix,"orthonormal contrasts, (n - 1) x n, rows orthogonal to 1",
+"\sigma^2_\mu, \sigma^2_\tau, \sigma^2_\delta, \sigma^2_\lambda",v_mu v_tau v_delta v_lambda,scalar,"prior variances",.priors
+"\nu, S^2_0",nu s0^2,scalar,"degrees of freedom and scale of the prior of the error variance",.priors
+"\mathrm{SSW}",SSW,scalar,"within-cell sum of squares",
+"\mathbf{A}^\top, \mathbf{1}, \mathbf{I}",A^T 1 I,operator,"transpose, vector of ones, identity matrix",

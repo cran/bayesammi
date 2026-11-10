@@ -1,0 +1,343 @@
+---
+title: "Bayesian stability models: Eberhart-Russell, Finlay-Wilkinson and Shukla"
+author: "Muhammad Yaseen"
+date: last-modified
+format:
+  html:
+    self-contained: true
+    number-sections: true
+    toc: true
+    toc-depth: 3
+    highlight-style: pygments
+    code-tools: true
+    html-math-method: mathjax
+vignette: >
+  %\VignetteIndexEntry{Bayesian stability models: Eberhart-Russell, Finlay-Wilkinson and Shukla}
+  %\VignetteEngine{quarto::html}
+  %\VignetteEncoding{UTF-8}
+execute:
+  echo: true
+  warning: false
+  message: false
+---
+
+{{< include _bayesammi-macros.txt >}}
+
+```{r setup, include = FALSE}
+# HTML figures are drawn as PNG and kept as WebP: lossless (the same pixels in about half the space of PNG), or
+# lossy at quality 90 when that is less than half the size, as for traces and densities of thousands of draws. The
+# PDF figures stay vector graphics. Any failure of magick (not installed, no WebP, or a broken installation whose
+# system libraries are missing) keeps the PNG
+webp <- function(path) {
+  if (knitr::is_latex_output() || !grepl(pattern = "[.]png$", x = path)) return(path)
+  tryCatch(
+      {
+        if (!requireNamespace("magick", quietly = TRUE) || !isTRUE(magick::magick_config()$webp)) return(path)
+        img <- magick::image_read(path)
+        out <- sub(pattern = "[.]png$", replacement = ".webp", x = path)
+        tmp <- tempfile(fileext = ".webp")
+        magick::image_write(
+            image   = img
+          , path    = out
+          , format  = "webp"
+          , quality = 100
+          , defines = c(`webp:lossless` = "true")
+          )
+        magick::image_write(image = img, path = tmp, format = "webp", quality = 90)
+        if (file.size(tmp) < file.size(out) / 2) file.copy(from = tmp, to = out, overwrite = TRUE)
+        unlink(c(path, tmp))
+        out
+      }
+    , error = function(e) path
+    )
+}
+knitr::opts_chunk$set(collapse = FALSE, comment = "", fig.width = 7, fig.height = 5,
+                      dev = if (knitr::is_latex_output()) "cairo_pdf" else "ragg_png", dpi = 96,
+                      fig.process = webp)
+if (requireNamespace("bayesammi", quietly = TRUE)) library(bayesammi) else
+  pkgload::load_all(export_all = FALSE, helpers = FALSE, quiet = TRUE)
+```
+
+# Abstract
+
+The joint regression of Finlay and Wilkinson (1963) and Eberhart and Russell (1966) and the stability variance of
+Shukla (1972) are the most used measures of adaptability and stability. Their classical estimates come with tests,
+not with the uncertainty a breeder needs to choose. `bayes_stability()` fits the three models by Gibbs sampling, so
+every slope, deviation variance and stability variance has a posterior distribution. This vignette gives the model,
+the sampler, an analysis of `Maiz`, a comparison of the three models and the safety-first index of Eskridge (1990).
+
+# Model
+
+For genotype $i$, environment $j$ and plot $l$,
+$$y_{ijl} = \mu + g_i + (1 + b_i)h_j + d_{ij} + e_{ijl}, \qquad d_{ij} \sim N(0, \sigma^2_{d,i}), \quad e_{ijl}
+\sim N(0, \sigma^2),$$
+with $\sum_i g_i = \sum_j h_j = \sum_i b_i = 0$. The environmental index $h_j$ is a parameter, estimated jointly
+with the others, as in the Bayesian Finlay-Wilkinson regression of Lian and de los Campos (2016). The classical
+analysis plugs in the environment means instead and so ignores their error. The slope of genotype $i$ is $1 + b_i$,
+with average 1.
+
+| `.model` | Slopes | Deviation variance | Classical counterpart |
+|---|---|---|---|
+| `"ER"` | yes | $\sigma^2_{d,i}$ for every genotype | Eberhart and Russell (1966); Bayesian version of Oliveira et al. (2018) |
+| `"FW"` | yes | one $\sigma^2_d$ | Finlay and Wilkinson (1963) |
+| `"Shukla"` | no ($b_i = 0$) | $\sigma^2_{d,i}$ for every genotype: the stability variance | Shukla (1972); Edwards and Jannink (2006) |
+
+The replicates separate the deviations $d_{ij}$ from the plot error $e_{ijl}$, so the data must have replicates.
+
+## Priors
+
+`bam_stab_priors()` sets normal priors on $\mu$ and on the contrasts $\mK_G\mathbf{g}$, $\mK_E\mathbf{h}$ and
+$\mK_G\mathbf{b}$ (so the sums are zero), and scaled inverse chi-squared priors on $\sigma^2$ and
+$\sigma^2_{d,i}$. The defaults are vague and in the unit of the trait: $10^4$ times the variance of the response for
+the effects, and the least-squares variances as scales with one degree of freedom.
+
+```{r priors}
+bam_stab_priors(
+    mu_var = NULL
+  , g_var  = NULL
+  , h_var  = NULL
+  , b_var  = 100
+  , nu     = 1
+  , s2     = NULL
+  , nu_d   = 1
+  , s2_d   = NULL
+  )
+```
+
+## The sampler
+
+Every conditional distribution is normal or scaled inverse chi-squared. Drawing the deviations $d_{ij}$ one at a
+time next to the genotype effects would mix slowly, because the mean of the deviations of a genotype and its effect
+$g_i$ trade off. The sampler therefore draws $\mu$, $\mathbf{g}$, $\mathbf{h}$ and $\mathbf{b}$ with the deviations
+integrated out: each observed cell mean then has variance $\sigma^2_{d,i} + \sigma^2/n_{ij}$. The deviations
+come next, then the variances. This is a partially collapsed Gibbs sampler: each sweep is still an exact draw from
+the posterior. Unbalanced data need nothing more, as the weights use the number of plots of every cell, and an empty
+cell has weight zero. The sampler is compiled; vignette 13 checks it against a plain R version.
+
+# The Eberhart-Russell model on Maiz
+
+```{r fit}
+fs <-
+  bayes_stability(
+      .data   = Maiz
+    , .y      = y
+    , .gen    = entry
+    , .env    = site
+    , .rep    = rep
+    , .model  = "ER"
+    , .nIter  = 3000
+    , .burnin = 500
+    , .thin   = 1
+    , .chains = 2
+    , .priors = bam_stab_priors(
+          mu_var = NULL
+        , g_var  = NULL
+        , h_var  = NULL
+        , b_var  = 100
+        , nu     = 1
+        , s2     = NULL
+        , nu_d   = 1
+        , s2_d   = NULL
+        )
+    , .level  = 0.95
+    , .alpha  = 0.05
+    , .seed   = 1
+    , .waic   = TRUE
+    )
+fs
+```
+
+```{r facts, include = FALSE}
+s <- fs$stability
+up <- s[slope_lower > 1, Gen]
+dn <- s[slope_upper < 1, Gen]
+best <- s[which.max(prob_best_safety)]
+lst <- function(x) if (length(x) == 0) "none" else if (length(x) == 1) x else paste(paste(x[-length(x)], collapse = ", "), "and", x[length(x)])
+```
+
+The slopes of genotypes `r lst(up)` lie above 1 with 95% posterior probability: they respond more than the average
+genotype to good environments. The slope of `r lst(dn)` lies below 1. The posterior probability that a slope exceeds 1
+is in the column `prob_slope_above_1`. A breeder can use it directly, which a test of $b_i = 1$ does not allow.
+
+```{r slopes, fig.height = 5.2}
+plot(x = fs, which = "slopes")
+```
+
+```{r lines, fig.height = 5.2}
+plot(x = fs, which = "lines")
+```
+
+```{r deviations, fig.height = 4.4}
+plot(x = fs, which = "deviations")
+```
+
+The deviation variances are poorly determined from 20 environments, so their HPD intervals are wide and overlap.
+The Bayesian analysis shows this directly; a classical F test of $\sigma^2_{d,i} = 0$ would hide it.
+
+## Least squares and Bayes
+
+```{r ls}
+data.table::data.table(
+    Gen        = s$Gen
+  , slope_ls   = round(x = fs$ls$slope, digits = 3)
+  , slope      = round(x = s$slope, digits = 3)
+  , dev_var_ls = round(fs$ls$dev_var)
+  , dev_var    = round(s$dev_var)
+  )
+```
+
+```{r lsr, include = FALSE}
+rs <- round(x = cor(x = fs$ls$slope, y = s$slope), digits = 3)
+rd <- round(x = cor(x = fs$ls$dev_var, y = s$dev_var, method = "spearman"), digits = 2)
+```
+
+The posterior means of the slopes are close to the least-squares slopes (correlation `r rs`). The deviation
+variances differ more. The posterior of a variance estimated from 20 environments is skewed to the right, so its mean
+lies above its mode. The prior, with its scale at the pooled least-squares value, also pulls the small variances up.
+The order of the genotypes changes less (rank correlation `r rd`).
+
+# The safety-first index
+
+Eskridge (1990) ranks genotypes by a lower quantile of their yield across environments,
+$\mu + g_i - z_{1-\alpha}\sqrt{V_i}$, where $V_i$ is the variance of genotype $i$ across environments under the model:
+
+| Model | $V_i$ |
+|---|---|
+| Eberhart-Russell | $b_i^2 s^2_h (1 - 1/E) + \sigma^2_{d,i}$ |
+| Finlay-Wilkinson | $b_i^2 s^2_h (1 - 1/E)$ |
+| Shukla | $s^2_h + \sigma^2_{d,i}$ |
+
+Here $s^2_h$ is the variance of the environmental index. The index is computed on every draw, so it has an HPD
+interval and every genotype has a probability of being the best on it. Here `r best$Gen` is most probably the best
+(`r round(best$prob_best_safety, 2)`).
+
+```{r sf}
+s[order(-safety_first), list(
+    Gen
+  , mean
+  , safety_first
+  , safety_first_lower
+  , safety_first_upper
+  , prob_best_safety
+  )]
+```
+
+# Which model?
+
+```{r models}
+ff <-
+  bayes_stability(
+      .data   = Maiz
+    , .y      = y
+    , .gen    = entry
+    , .env    = site
+    , .rep    = rep
+    , .model  = "FW"
+    , .nIter  = 3000
+    , .burnin = 500
+    , .thin   = 1
+    , .chains = 2
+    , .priors = bam_stab_priors(
+          mu_var = NULL
+        , g_var  = NULL
+        , h_var  = NULL
+        , b_var  = 100
+        , nu     = 1
+        , s2     = NULL
+        , nu_d   = 1
+        , s2_d   = NULL
+        )
+    , .level  = 0.95
+    , .alpha  = 0.05
+    , .seed   = 1
+    , .waic   = TRUE
+    )
+fh <-
+  bayes_stability(
+      .data   = Maiz
+    , .y      = y
+    , .gen    = entry
+    , .env    = site
+    , .rep    = rep
+    , .model  = "Shukla"
+    , .nIter  = 3000
+    , .burnin = 500
+    , .thin   = 1
+    , .chains = 2
+    , .priors = bam_stab_priors(
+          mu_var = NULL
+        , g_var  = NULL
+        , h_var  = NULL
+        , b_var  = 100
+        , nu     = 1
+        , s2     = NULL
+        , nu_d   = 1
+        , s2_d   = NULL
+        )
+    , .level  = 0.95
+    , .alpha  = 0.05
+    , .seed   = 1
+    , .waic   = TRUE
+    )
+cp <-
+  bam_compare(
+      ER     = fs
+    , FW     = ff
+    , Shukla = fh
+    )
+cp
+```
+
+```{r cpf, include = FALSE}
+t <- cp$table
+```
+
+WAIC prefers the `r t$model[1]` model; the next, `r t$model[2]`, is `r round(t$dWAIC[2], 1)` above it
+(`r round(t$dWAIC[2] / t$dWAIC_se[2], 1)` standard errors of the difference)`r if (all(t$dWAIC[-1] < 2 * t$dWAIC_se[-1])) ". The standard errors do not separate the three models here; the choice can follow the question, the slopes for adaptability and the variances for stability" else ""`.
+The models are fitted to the same plots, so they can also be compared with the AMMI and GGE fits of `bayes_ammi()`
+(vignette 9).
+
+# The stability fit and the decision tools
+
+The draws of the cell means $\mu + g_i + (1 + b_i)h_j + d_{ij}$ feed the decision tools of vignette 9:
+
+```{r decide}
+bam_superiority(
+    fit           = fs
+  , .s            = 0.2
+  , higher_better = TRUE
+  )$marginal
+```
+
+# Interpretation and sources
+
+```{r int}
+bam_interpret(
+    x             = fs
+  , higher_better = TRUE
+  , top           = 5
+  )
+```
+
+```{r cite}
+bam_cite(
+    x     = fs
+  , style = c("text", "bibtex")[1]
+  )
+```
+
+# References
+
+Finlay, K. W. and Wilkinson, G. N. (1963). The analysis of adaptation in a plant-breeding programme. *Australian Journal of Agricultural Research*, 14(6), 742--754. doi:10.1071/AR9630742
+
+Eberhart, S. A. and Russell, W. A. (1966). Stability parameters for comparing varieties. *Crop Science*, 6(1), 36--40. doi:10.2135/cropsci1966.0011183X000600010011x
+
+Shukla, G. K. (1972). Some statistical aspects of partitioning genotype-environmental components of variability. *Heredity*, 29(2), 237--245.
+
+Eskridge, K. M. (1990). Selection of stable cultivars using a safety-first rule. *Crop Science*, 30, 369--374.
+
+Lian, L. and de los Campos, G. (2016). FW: an R package for Finlay-Wilkinson regression that incorporates genomic/pedigree information and covariance structures between environments. *G3: Genes, Genomes, Genetics*, 6(3), 589--597. doi:10.1534/g3.115.026328
+
+Oliveira, T. R. A., Carvalho, H. W. L., Nascimento, M., Costa, E. F. N., Amaral Junior, A. T., Gravina, G. A. and Carvalho Filho, J. L. S. (2018). The Eberhart and Russell's Bayesian method used as an instrument to select maize hybrids. *Euphytica*, 214, 64. doi:10.1007/s10681-018-2146-y
+
+Edwards, J. W. and Jannink, J.-L. (2006). Bayesian modeling of heterogeneous error and genotype x environment interaction variances. *Crop Science*, 46(2), 820. doi:10.2135/cropsci2005.0164

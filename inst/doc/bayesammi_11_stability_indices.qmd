@@ -1,0 +1,266 @@
+---
+title: "Posterior distributions of stability indices"
+author: "Muhammad Yaseen"
+date: last-modified
+format:
+  html:
+    self-contained: true
+    number-sections: true
+    toc: true
+    toc-depth: 3
+    highlight-style: pygments
+    code-tools: true
+    html-math-method: mathjax
+vignette: >
+  %\VignetteIndexEntry{Posterior distributions of stability indices}
+  %\VignetteEngine{quarto::html}
+  %\VignetteEncoding{UTF-8}
+execute:
+  echo: true
+  warning: false
+  message: false
+---
+
+{{< include _bayesammi-macros.txt >}}
+
+```{r setup, include = FALSE}
+# HTML figures are drawn as PNG and kept as WebP: lossless (the same pixels in about half the space of PNG), or
+# lossy at quality 90 when that is less than half the size, as for traces and densities of thousands of draws. The
+# PDF figures stay vector graphics. Any failure of magick (not installed, no WebP, or a broken installation whose
+# system libraries are missing) keeps the PNG
+webp <- function(path) {
+  if (knitr::is_latex_output() || !grepl(pattern = "[.]png$", x = path)) return(path)
+  tryCatch(
+      {
+        if (!requireNamespace("magick", quietly = TRUE) || !isTRUE(magick::magick_config()$webp)) return(path)
+        img <- magick::image_read(path)
+        out <- sub(pattern = "[.]png$", replacement = ".webp", x = path)
+        tmp <- tempfile(fileext = ".webp")
+        magick::image_write(
+            image   = img
+          , path    = out
+          , format  = "webp"
+          , quality = 100
+          , defines = c(`webp:lossless` = "true")
+          )
+        magick::image_write(image = img, path = tmp, format = "webp", quality = 90)
+        if (file.size(tmp) < file.size(out) / 2) file.copy(from = tmp, to = out, overwrite = TRUE)
+        unlink(c(path, tmp))
+        out
+      }
+    , error = function(e) path
+    )
+}
+knitr::opts_chunk$set(collapse = FALSE, comment = "", fig.width = 7, fig.height = 6,
+                      dev = if (knitr::is_latex_output()) "cairo_pdf" else "ragg_png", dpi = 96,
+                      fig.process = webp)
+if (requireNamespace("bayesammi", quietly = TRUE)) library(bayesammi) else
+  pkgload::load_all(export_all = FALSE, helpers = FALSE, quiet = TRUE)
+```
+
+# Abstract
+
+Dozens of stability indices are in use, each computed once from the cell means of a trial. Computed on every
+posterior draw of the cell means instead, each index gets a posterior mean, an HPD interval and, for every genotype,
+a probability of being the best. `bam_indices()` does this for five classical indices and `bam_ammi_indices()` for
+six AMMI-based ones. The cell means come from any fit: AMMI or GGE (`bayes_ammi()`) or a stability model
+(`bayes_stability()`).
+
+```{r fit}
+fit <-
+  bayes_ammi(
+      .data   = Maiz
+    , .y      = y
+    , .gen    = entry
+    , .env    = site
+    , .rep    = rep
+    , .nIter  = 3000
+    , .k      = 2
+    , .burnin = 500
+    , .thin   = 1
+    , .chains = 2
+    , .priors = bam_priors(
+          mu_mean     = 0
+        , mu_var      = 1e+8
+        , tau_mean    = 0
+        , tau_var     = 1e+8
+        , delta_mean  = 0
+        , delta_var   = 1e+8
+        , lambda_mean = 0
+        , lambda_var  = 1e+8
+        , nu          = 1
+        , s2          = NULL
+        )
+    , .level  = 0.95
+    , .seed   = 11
+    , .align  = TRUE
+    , .model  = "AMMI"
+    , .het    = FALSE
+    , .waic   = TRUE
+    )
+```
+
+# Classical indices
+
+For one draw of the cell means $\eta_{ij}$, with interaction
+$\epsilon_{ij} = \eta_{ij} - \bar{\eta}_{i\cdot} - \bar{\eta}_{\cdot j} + \bar{\eta}_{\cdot\cdot}$:
+
+| Index | Formula | Better |
+|---|---|---|
+| Wricke's ecovalence | $W_i = \sum_j \epsilon_{ij}^2$ | smaller |
+| Shukla's stability variance | $\frac{G}{(G-2)(E-1)}W_i - \frac{\sum_k W_k}{(G-1)(G-2)(E-1)}$ | smaller |
+| Lin and Binns' superiority | $\sum_j (\eta_{ij} - M_j)^2 / (2E)$, $M_j$ the best in environment $j$ | smaller |
+| Annicchiarico's reliability | $\bar{Z}_i - z_{1-p} s_{Z_i}$, $Z_{ij} = 100\,\eta_{ij}/\bar{\eta}_{\cdot j}$ | larger |
+| Eskridge's safety-first | $\bar{\eta}_{i\cdot} - z_{1-\alpha} s_i$, $s_i^2$ the variance across environments | larger |
+
+```{r ind}
+ind <-
+  bam_indices(
+      fit           = fit
+    , higher_better = TRUE
+    , .prob         = 0.25
+    , .alpha        = 0.05
+    )
+ind
+```
+
+```{r ind-plot, fig.height = 6}
+plot(x = ind)
+```
+
+```{r agree, include = FALSE}
+m <- ind$means
+rc <- round(x = cor(x = m$wricke, y = m$lin_binns, method = "spearman"), digits = 2)
+neg <- ind$indices[index == "shukla" & lower < 0, .N]
+```
+
+The indices measure different things. Wricke's and Shukla's indices measure stability alone and rank genotypes in
+the same order. Lin and Binns' index measures distance from the best, so it mixes mean and stability. The rank
+correlation between Wricke's and Lin and Binns' posterior means is `r rc`. Shukla's estimator can be negative, as in
+the classical analysis; `r neg` of its 9 HPD intervals reach below zero, a sign that the stability variance of those
+genotypes cannot be told from zero.
+
+Because the indices are computed from the cell means, without plot error, they describe the stability of the
+expected performance. The HPD intervals show how well 20 environments determine them; they are wide.
+
+# AMMI-based indices
+
+With coordinates $\mathrm{PC}_{ik} = \lambda_k^{1/2}\alpha_{ik}$ and the share
+$\theta_k = \lambda_k^2/\sum_m \lambda_m^2$ of each fitted term:
+
+| Index | Formula | Source |
+|---|---|---|
+| ASV | $\sqrt{(\lambda_1^2/\lambda_2^2\,\mathrm{PC}_{i1})^2 + \mathrm{PC}_{i2}^2}$ | Purchase et al. (2000) |
+| SIPC | $\sum_k \lvert\mathrm{PC}_{ik}\rvert$ | Sneller et al. (1997) |
+| EV | $\sum_k \alpha_{ik}^2 / K$ | Zobel (1994) |
+| Za | $\sum_k \theta_k \lvert\alpha_{ik}\rvert$ | Zali et al. (2012) |
+| WAAS | $\sum_k \theta_k \lvert\mathrm{PC}_{ik}\rvert$ | Olivoto et al. (2019) |
+| WAASY | mean and WAAS rescaled to 0-100 and weighted | Olivoto et al. (2019) |
+
+```{r ai}
+ai <-
+  bam_ammi_indices(
+      fit           = fit
+    , higher_better = TRUE
+    , .weight_y     = 50
+    )
+ai
+```
+
+```{r ai-plot, fig.height = 6}
+plot(x = ai)
+```
+
+WAASY gives the mean and the stability equal weights (`.weight_y = 50`). A breeder who values the mean more raises the
+weight:
+
+```{r waasy}
+data.table::rbindlist(
+    l = lapply(
+        X   = c(30, 50, 70)
+      , FUN = function(wy) {
+          a <-
+            bam_ammi_indices(
+                fit           = fit
+              , higher_better = TRUE
+              , .weight_y     = wy
+              )
+          a$indices[index == "WAASY"][order(-mean)][1:3, list(weight = wy, Gen, mean, prob_best)]
+        }
+      )
+  )
+```
+
+# Indices from a stability model
+
+The same classical indices can be computed from the cell means of a `bayes_stability()` fit:
+
+```{r from-stab}
+fs <-
+  bayes_stability(
+      .data   = Maiz
+    , .y      = y
+    , .gen    = entry
+    , .env    = site
+    , .rep    = rep
+    , .model  = "ER"
+    , .nIter  = 2000
+    , .burnin = 500
+    , .thin   = 1
+    , .chains = 1
+    , .priors = bam_stab_priors(
+          mu_var = NULL
+        , g_var  = NULL
+        , h_var  = NULL
+        , b_var  = 100
+        , nu     = 1
+        , s2     = NULL
+        , nu_d   = 1
+        , s2_d   = NULL
+        )
+    , .level  = 0.95
+    , .alpha  = 0.05
+    , .seed   = 11
+    , .waic   = TRUE
+    )
+bam_indices(
+    fit           = fs
+  , higher_better = TRUE
+  , .prob         = 0.25
+  , .alpha        = 0.05
+  )$means
+```
+
+# Interpretation
+
+```{r int}
+bam_interpret(
+    x             = ind
+  , higher_better = TRUE
+  , top           = 5
+  )
+```
+
+# References
+
+Wricke, G. (1962). Uber eine Methode zur Erfassung der okologischen Streubreite in Feldversuchen. *Zeitschrift fur Pflanzenzuchtung*, 47, 92--96.
+
+Shukla, G. K. (1972). Some statistical aspects of partitioning genotype-environmental components of variability. *Heredity*, 29(2), 237--245.
+
+Lin, C. S. and Binns, M. R. (1988). A superiority measure of cultivar performance for cultivar x location data. *Canadian Journal of Plant Science*, 68(1), 193--198. doi:10.4141/cjps88-018
+
+Annicchiarico, P. (1992). Cultivar adaptation and recommendation from alfalfa trials in Northern Italy. *Journal of Genetics and Breeding*, 46, 269--278.
+
+Eskridge, K. M. (1990). Selection of stable cultivars using a safety-first rule. *Crop Science*, 30, 369--374.
+
+Purchase, J. L., Hatting, H. and van Deventer, C. S. (2000). Genotype x environment interaction of winter wheat in South Africa: II. Stability analysis of yield performance. *South African Journal of Plant and Soil*, 17(3), 101--107.
+
+Sneller, C. H., Kilgore-Norquest, L. and Dombek, D. (1997). Repeatability of yield stability statistics in soybean. *Crop Science*, 37(2), 383--390.
+
+Zobel, R. W. (1994). Stress resistance and root systems. In *Proceedings of the Workshop on Adaptation of Plants to Soil Stress*, INTSORMIL Publication 94-2, 80--99. University of Nebraska-Lincoln.
+
+Zali, H., Farshadfar, E., Sabaghpour, S. H. and Karimizadeh, R. (2012). Evaluation of genotype x environment interaction in chickpea using measures of stability from AMMI model. *Annals of Biological Research*, 3(7), 3126--3136.
+
+Olivoto, T., Lucio, A. D. C., da Silva, J. A. G., Marchioro, V. S., de Souza, V. Q. and Jost, E. (2019). Mean performance and stability in multi-environment trials I: combining features of AMMI and BLUP techniques. *Agronomy Journal*, 111(6), 2949--2960. doi:10.2134/agronj2019.03.0220
+
+Farshadfar, E. (2008). Incorporation of AMMI stability value and grain yield in a single non-parametric index (GSI) in bread wheat. *Pakistan Journal of Biological Sciences*, 11(14), 1791--1796.

@@ -1,0 +1,41 @@
+% Notation of bayesammi: the appendix used in articles and the reference for the help pages and vignettes.
+% Rule: scalars upper case in normal face; indices lower-case italic; vectors lower case in bold; matrices upper case
+% in bold; Greek letters follow the same rule (\boldsymbol for bold Greek); sets calligraphic; operators upright.
+% Generated from notation.csv by tools/notation-tex.R: edit the CSV, not this file.
+\begin{longtable}{>{\raggedright\arraybackslash}p{0.28\textwidth}>{\raggedright\arraybackslash}p{0.66\textwidth}}
+\caption{Notation of \texttt{bayesammi}.}\\
+\toprule
+Symbol & Meaning\\
+\midrule
+\endhead
+$G$ & number of genotypes (\texttt{.gen})\\
+$E$ & number of environments (\texttt{.env})\\
+$B$ & number of replicates in each environment (largest number of plots in a cell when unbalanced) (\texttt{.rep})\\
+$K$ & number of bilinear terms (\texttt{.k})\\
+$n$ & number of observations BGE\\
+$i$, $j$, $l$, $k$ & genotype, environment, replicate, bilinear term\\
+$\mathbf{Y} = (\bar{y}_{ij})$ & table of genotype-by-environment means (\texttt{.y})\\
+$\mu$ & overall mean\\
+$\boldsymbol{\tau} = (\tau_i)$ & genotype main effects (sum zero)\\
+$\boldsymbol{\delta} = (\delta_j)$ & environment main effects (sum zero)\\
+$\lambda_k$ & singular value of bilinear term k\\
+$\boldsymbol{\alpha}_k$, $\boldsymbol{\gamma}_k$ & genotype and environment score vectors of term k (unit length)\\
+$\sigma^2$ & error variance\\
+$\sigma^2_j$ & error variance of environment j (.het = TRUE) (\texttt{.het})\\
+$\eta_{ij}$ & expected value of genotype i in environment j\\
+$g_i$, $h_j$ & genotype effect and environmental index of the stability models\\
+$1 + b_i$ & slope of genotype i on the environmental index\\
+$d_{ij}$ & deviation of genotype i from its regression in environment j\\
+$\sigma^2_{d,i}$ & deviation (Eberhart-Russell) or stability (Shukla) variance of genotype i (\texttt{.model})\\
+$W_i$, $P_i$, $I_i$ & Wricke's ecovalence, Lin and Binns' superiority, Annicchiarico's reliability\\
+$\theta_k$ & share of term k in the fitted interaction (Za, WAAS)\\
+$n_{ij}$ & number of observed plots of genotype i in environment j\\
+$S$ & number of kept posterior draws (\texttt{.nIter})\\
+$\mathrm{DIC}$, $\mathrm{WAIC}$ & deviance and widely applicable information criteria (\texttt{.waic})\\
+$\mathbf{K}_n$ & orthonormal contrasts, (n - 1) x n, rows orthogonal to 1\\
+$\sigma^2_\mu$, $\sigma^2_\tau$, $\sigma^2_\delta$, $\sigma^2_\lambda$ & prior variances (\texttt{.priors})\\
+$\nu$, $S^2_0$ & degrees of freedom and scale of the prior of the error variance (\texttt{.priors})\\
+$\mathrm{SSW}$ & within-cell sum of squares\\
+$\mathbf{A}^\top$, $\mathbf{1}$, $\mathbf{I}$ & transpose, vector of ones, identity matrix\\
+\bottomrule
+\end{longtable}

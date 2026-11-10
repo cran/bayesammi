@@ -3,51 +3,57 @@
 \name{ge_model}
 \alias{ge_model}
 \alias{ge_model.default}
-\title{Genotype by Environment Interaction Model}
+\title{Linear mixed model of a multi-environment trial}
 \usage{
 ge_model(.data, .y, .gen, .env, .rep)
 
 \method{ge_model}{default}(.data, .y, .gen, .env, .rep)
 }
 \arguments{
-\item{.data}{data.frame}
+\item{.data}{a data frame with one row per plot.}
 
-\item{.y}{Response Variable}
-
-\item{.gen}{Genotypes Factor}
-
-\item{.env}{Environment Factor}
-
-\item{.rep}{Replication Factor}
+\item{.y, .gen, .env, .rep}{the columns of the response, genotypes, environments and replicates: bare names, strings
+or vectors.}
 }
 \value{
-Genotype by Environment Interaction Model
+The \code{lmerMod} object of \code{lme4::lmer(Y ~ Env + Gen + Env:Gen + (1 | Env:Rep))}.
 }
 \description{
-Calcuates Genotype by Environment Interaction Model
+\code{ge_model()} fits the two-way model with interaction and random replicates within environments by restricted
+maximum likelihood (\code{lme4::lmer()}). Its residual variance is the error variance of the least-squares AMMI
+fit (\code{\link{ge_ammi}()}, which computes it in closed form).
+}
+\details{
+\deqn{y_{ijl} = \mu + \delta_j + \tau_i + (\tau\delta)_{ij} + b_{l(j)} + e_{ijl}, \qquad b_{l(j)} \sim N(0,
+  \sigma^2_b), \quad e_{ijl} \sim N(0, \sigma^2).}{y_ijl = mu + delta_j + tau_i + (tau delta)_ij + b_l(j) + e_ijl,
+  b ~ N(0, sigma_b^2), e ~ N(0, sigma^2).}
+The package \pkg{lme4} is needed (it is suggested, not required, since version 1.0.0).
 }
 \examples{
-
 data(Maiz)
-fm1 <-
-   ge_model(
-      .data  = Maiz
-     , .y    = y
-     , .gen  = entry
-     , .env  = site
-     , .rep  = rep
-     )
-
-
+if (requireNamespace("lme4", quietly = TRUE)) {
+  fm <-
+    ge_model(
+        .data = Maiz
+      , .y    = y
+      , .gen  = entry
+      , .env  = site
+      , .rep  = rep
+      )
+  stats::sigma(fm)^2
+}
 }
 \references{
-Crossa, J., Perez-Elizalde, S., Jarquin, D., Cotes, J.M., Viele, K., Liu, G., and Cornelius, P.L. (2011)
- Bayesian Estimation of the Additive Main Effects and Multiplicative Interaction Model
- \emph{Crop Science}, \strong{51}, 1458–1469.
- (\href{https://acsess.onlinelibrary.wiley.com/doi/abs/10.2135/cropsci2010.06.0343}{doi: 10.2135/cropsci2010.06.0343})
+Crossa, J., Perez-Elizalde, S., Jarquin, D., Cotes, J. M., Viele, K., Liu, G. and Cornelius, P. L. (2011).
+Bayesian estimation of the additive main effects and multiplicative interaction model. \emph{Crop Science},
+\strong{51}(4), 1458--1469. \doi{10.2135/cropsci2010.06.0343}
+
+Bates, D., Maechler, M., Bolker, B. and Walker, S. (2015). Fitting linear mixed-effects models using lme4.
+\emph{Journal of Statistical Software}, \strong{67}(1), 1--48. \doi{10.18637/jss.v067.i01}
+}
+\seealso{
+\code{\link{ge_ammi}}
 }
 \author{
-\enumerate{
-    \item Muhammad Yaseen (\email{myaseen208@gmail.com})
-   }
+Muhammad Yaseen (\email{myaseen208@gmail.com})
 }

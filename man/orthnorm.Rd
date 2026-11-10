@@ -3,33 +3,51 @@
 \name{orthnorm}
 \alias{orthnorm}
 \alias{orthnorm.default}
-\title{Orthogonal Normalization}
+\title{Gram-Schmidt orthonormalisation}
 \usage{
 orthnorm(u = NULL, basis = TRUE, norm = TRUE)
 
 \method{orthnorm}{default}(u = NULL, basis = TRUE, norm = TRUE)
 }
 \arguments{
-\item{u}{Matrix}
+\item{u}{a matrix (or vector) whose columns are orthogonalised.}
 
-\item{basis}{Logical argument by default TRUE}
+\item{basis}{complete the columns to a basis of the whole space (default \code{TRUE}).}
 
-\item{norm}{Logical argument by default TRUE}
+\item{norm}{scale the columns to unit length (default \code{TRUE}).}
 }
 \value{
-Matrix
+The matrix of orthogonal (orthonormal with \code{norm = TRUE}) columns; \code{NULL} for \code{u = NULL}.
 }
 \description{
-Perform Orthogonal Normalization of a matrix
+\code{orthnorm()} orthogonalises the columns of a matrix by the Gram-Schmidt process, optionally completes them to
+a basis of the whole space and scales them to unit length.
+}
+\details{
+For columns \eqn{\mathbf{u}_1, \ldots, \mathbf{u}_m}{u_1, ..., u_m},
+\deqn{\mathbf{v}_1 = \mathbf{u}_1, \qquad \mathbf{v}_i = \mathbf{u}_i - \sum_{h < i}\frac{\mathbf{u}_i^\top
+  \mathbf{v}_h}{\mathbf{v}_h^\top\mathbf{v}_h}\mathbf{v}_h,}{v_1 = u_1; v_i = u_i - sum_{h < i} (u_i' v_h / v_h'
+  v_h) v_h,}
+each divided by its length when \code{norm = TRUE}. With \code{basis = TRUE} and fewer columns than rows, unit
+vectors are added (those least explained by the given columns) to complete a basis.
+}
+\examples{
+V <-
+  orthnorm(
+      u     = cbind(1, 1:4)
+    , basis = TRUE
+    , norm  = TRUE
+    )
+round(x = crossprod(V), digits = 10)
 }
 \references{
-Crossa, J., Perez-Elizalde, S., Jarquin, D., Cotes, J.M., Viele, K., Liu, G., and Cornelius, P.L. (2011)
- Bayesian Estimation of the Additive Main Effects and Multiplicative Interaction Model
- \emph{Crop Science}, \strong{51}, 1458–1469.
- (\href{https://acsess.onlinelibrary.wiley.com/doi/abs/10.2135/cropsci2010.06.0343}{doi: 10.2135/cropsci2010.06.0343})
+Crossa, J., Perez-Elizalde, S., Jarquin, D., Cotes, J. M., Viele, K., Liu, G. and Cornelius, P. L. (2011).
+Bayesian estimation of the additive main effects and multiplicative interaction model. \emph{Crop Science},
+\strong{51}(4), 1458--1469. \doi{10.2135/cropsci2010.06.0343}
+}
+\seealso{
+\code{\link{matrix_k}}
 }
 \author{
-\enumerate{
-    \item Muhammad Yaseen (\email{myaseen208@gmail.com})
-   }
+Muhammad Yaseen (\email{myaseen208@gmail.com})
 }

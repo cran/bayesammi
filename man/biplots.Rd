@@ -3,8 +3,20 @@
 \name{biplots}
 \alias{biplots}
 \alias{biplots.default}
-\title{Biplots}
+\title{Biplots with highest posterior density regions}
 \usage{
+biplots(
+  model,
+  burnin = 0.3,
+  thin = 0.2,
+  pb = 0.05,
+  plot_stable = TRUE,
+  plot_unstable = TRUE,
+  ncolors = 5,
+  .which = c("both", "genotype", "environment"),
+  .grid = 100L
+)
+
 \method{biplots}{default}(
   model,
   burnin = 0.3,
@@ -12,68 +24,129 @@
   pb = 0.05,
   plot_stable = TRUE,
   plot_unstable = TRUE,
-  ncolors = 5
+  ncolors = 5,
+  .which = c("both", "genotype", "environment"),
+  .grid = 100L
 )
 }
 \arguments{
-\item{model}{Output from `bayes_ammi()`. This should contain the results of the Bayesian AMMI model, including all sampled iterations.}
+\item{model}{the result of \code{\link{bayes_ammi}()} (with \code{.k >= 2}).}
 
-\item{burnin}{Numeric. Percentage of iterations to discard as burn-in to avoid the effects of random initializations during sampling. For example, `burnin = 0.1` removes the first 10\% of iterations.}
+\item{burnin}{proportion of the stored draws of every chain discarded at its start (default 0.3).}
 
-\item{thin}{Numeric. Proportion of sampled iterations to retain for analysis. For example, `thin = 0.2` keeps 20\% of the iterations, selecting 1 out of every 5 iterations.}
+\item{thin}{proportion of the remaining draws used (default 0.2: every fifth draw).}
 
-\item{pb}{Numeric. Significance levels for the contours in the plot. Smaller values of `pb` result in wider contours, while higher values create smaller, more specific contours.}
+\item{pb}{one or more probabilities \eqn{p}{p}: the regions hold \eqn{100(1 - p)}{100(1 - p)}\% of the posterior
+(default 0.05, the 95\% region; \code{c(0.05, 0.01)} draws the 95\% and 99\% regions of the paper). The
+classification uses the first value.}
 
-\item{plot_stable}{Logical. If `TRUE`, stable instances are highlighted in the output plot.}
+\item{plot_stable, plot_unstable}{draw the regions that contain the origin, and those that do not (default both).}
 
-\item{plot_unstable}{Logical. If `TRUE`, unstable instances are highlighted in the output plot.}
+\item{ncolors}{number of colours used for the regions (default 5).}
 
-\item{ncolors}{Integer. Specifies the number of distinct colors to use in the plot. Adjust this to control the visual differentiation of elements in the plot.}
+\item{.which}{\code{"both"} (default), \code{"genotype"} or \code{"environment"}.}
+
+\item{.grid}{number of grid points per axis of the density estimate (default 100).}
 }
 \value{
-A list with the following components:
+An object of class \code{c("bam_biplots", "bam_result", "list")}, with the components of the earlier
+  version:
 \describe{
-  \item{plot}{A plot displaying the contours and final biplot values.}
-  \item{contour_data}{A `data.frame` containing the data used to create the contours.}
-  \item{biplot_data}{A `data.frame` containing the data used to recreate the final biplot values.}
+  \item{\code{contorns}}{\code{data.table} of the region boundaries: \code{byplot} (Genotype, Environment),
+    \code{ID} (number), \code{name}, \code{prob} (the region, for instance "95\%"), \code{piece} (a region can have
+    several pieces), \code{x}, \code{y}, \code{stable}.}
+  \item{\code{biplot_data}}{\code{data.table}, one row per genotype and environment: \code{byplot}, \code{ID},
+    \code{name}, \code{x}, \code{y} (posterior means of the coordinates), \code{stable} (region contains the
+    origin), \code{axis1_lower}, \code{axis1_upper} (marginal HPD interval of the first coordinate),
+    \code{axis1_significant} (it excludes zero), \code{group} (sign of the first coordinate when significant:
+    positive, negative, or not significant).}
+  \item{\code{biplot}}{the \code{ggplot}.}
 }
+  Methods: \code{print()}, \code{plot()}, \code{\link{bam_interpret}()}.
 }
 \description{
-biplots
+\code{biplots()} draws the Bayesian AMMI biplot of the first two bilinear terms with a highest posterior density
+(HPD) region around every genotype and environment (Crossa et al. 2011, Fig. 3 and 4). A region that contains the
+origin marks a genotype or environment whose interaction is not different from zero (stable); regions that
+overlap mark genotypes or environments that cannot be told apart, a homogeneous group.
+}
+\details{
+The points are the biplot coordinates of the paper,
+\deqn{\left(\lambda_1^{1/2}\alpha_{i1}, \lambda_2^{1/2}\alpha_{i2}\right), \qquad
+  \left(\lambda_1^{1/2}\gamma_{j1}, \lambda_2^{1/2}\gamma_{j2}\right),}{(lambda_1^(1/2) alpha_i1, lambda_2^(1/2)
+  alpha_i2), (lambda_1^(1/2) gamma_j1, lambda_2^(1/2) gamma_j2),}
+computed draw by draw. For each genotype and environment a bivariate kernel density \eqn{\hat{f}}{f} is estimated
+from the draws (normal kernels, normal reference bandwidths); the \eqn{100(1 - p)}{100(1 - p)}\% HPD region is
+\eqn{\{\mathbf{x} : \hat{f}(\mathbf{x}) \ge c_p\}}{{x : f(x) >= c_p}} with \eqn{c_p}{c_p} the
+\eqn{p}{p}-quantile of \eqn{\hat{f}}{f} at the draws, so that the region holds \eqn{100(1 - p)}{100(1 - p)}\% of
+them. The region contains the origin when \eqn{\hat{f}(\mathbf{0}) \ge c_p}{f(0) >= c_p} (\code{stable}). The
+criterion of the paper, the marginal HPD interval of the first coordinate excluding zero, is given as
+\code{axis1_significant}.
+
+\strong{Changes from the earlier versions.} The regions were drawn for the singular vectors without the factor
+\eqn{\lambda_k^{1/2}}{lambda_k^(1/2)}, with a fixed bandwidth of 0.2 whatever the scale; a genotype counted as
+stable when the bounding box of its contour covered the origin.
 }
 \examples{
-\dontrun{
 data(Maiz)
-
 fm1 <-
   bayes_ammi(
-    .data = Maiz,
-    .y = y,
-    .gen = entry,
-    .env = site,
-    .rep = rep,
-    .nIter = 200
-  )
-
-library(ggplot2)
-
-output_05 <- biplots(model = fm1, plot_stable = TRUE, plot_unstable = TRUE, pb = 0.05)
-output_05
-
-output_95 <- biplots(model = fm1, plot_stable = TRUE, plot_unstable = TRUE, pb = 0.95)
-output_95
-}
-
+      .data   = Maiz
+    , .y      = y
+    , .gen    = entry
+    , .env    = site
+    , .rep    = rep
+    , .nIter  = 1000
+    , .k      = 2
+    , .burnin = 200
+    , .thin   = 1
+    , .chains = 1
+    , .priors = bam_priors(
+          mu_mean     = 0
+        , mu_var      = 1e+8
+        , tau_mean    = 0
+        , tau_var     = 1e+8
+        , delta_mean  = 0
+        , delta_var   = 1e+8
+        , lambda_mean = 0
+        , lambda_var  = 1e+8
+        , nu          = 1
+        , s2          = NULL
+        )
+    , .level  = 0.95
+    , .seed   = 1
+    , .align  = TRUE
+    , .model  = c("AMMI", "GGE")
+    , .het    = FALSE
+    , .waic   = TRUE
+    )
+bp <-
+  biplots(
+      model         = fm1
+    , burnin        = 0
+    , thin          = 1
+    , pb            = c(0.05, 0.01)
+    , plot_stable   = TRUE
+    , plot_unstable = TRUE
+    , ncolors       = 5
+    , .which        = "both"
+    , .grid         = 100
+    )
+bp$biplot
+bp$biplot_data
 }
 \references{
-Crossa, J., Perez-Elizalde, S., Jarquin, D., Cotes, J.M., Viele, K., Liu, G., and Cornelius, P.L. (2011)
- Bayesian Estimation of the Additive Main Effects and Multiplicative Interaction Model
- \emph{Crop Science}, \strong{51}, 1458–1469.
- (\href{https://acsess.onlinelibrary.wiley.com/doi/abs/10.2135/cropsci2010.06.0343}{doi: 10.2135/cropsci2010.06.0343})
+Crossa, J., Perez-Elizalde, S., Jarquin, D., Cotes, J. M., Viele, K., Liu, G. and Cornelius, P. L. (2011).
+Bayesian estimation of the additive main effects and multiplicative interaction model. \emph{Crop Science},
+\strong{51}(4), 1458--1469. \doi{10.2135/cropsci2010.06.0343}
+
+Hyndman, R. J. (1996). Computing and graphing highest density regions. \emph{The American Statistician},
+\strong{50}(2), 120--126.
+}
+\seealso{
+\code{\link{bayes_ammi}}, \code{\link{bam_interpret}}
 }
 \author{
-\enumerate{
-    \item Julian Garcia Abadillo Velasco (\email{garciaabadillo.j@ufl.edu})
-    \item Diego Jarquin (\email{diego.jarquin@gmail.com})
-   }
+Julian Garcia Abadillo Velasco (\email{garciaabadillo.j@ufl.edu}), Diego Jarquin
+  (\email{diego.jarquin@gmail.com}), Muhammad Yaseen (\email{myaseen208@gmail.com})
 }

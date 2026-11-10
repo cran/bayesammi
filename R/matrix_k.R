@@ -1,39 +1,43 @@
-#' @name    matrix_k
-#' @aliases matrix_k
-#' @title   k Matrix
-#' @description Gives k matrix
+#' Orthonormal contrast matrix
 #'
-#' @param n  Number of columns
+#' @description
+#' \code{matrix_k()} returns the \eqn{(n - 1) \times n}{(n - 1) x n} matrix \eqn{\mathbf{K}_n}{K_n} whose rows are
+#' orthonormal and orthogonal to \eqn{\mathbf{1}_n}{1_n} (Helmert contrasts). \code{\link{bayes_ammi}()} writes the
+#' main effects as \eqn{\boldsymbol{\tau} = \mathbf{K}_G^\top\mathbf{t}}{tau = K_G' t}, which keeps them summing to
+#' zero.
 #'
-#' @return Matrix
+#' @details
+#' Row \eqn{r}{r} (\eqn{r = 1, \ldots, n - 1}{r = 1, ..., n - 1}) has \eqn{0}{0} in its first \eqn{r - 1}{r - 1}
+#' positions, \eqn{(n - r)/c_r}{(n - r)/c_r} in position \eqn{r}{r} and \eqn{-1/c_r}{-1/c_r} after it, with
+#' \eqn{c_r = \sqrt{(n - r)(n - r + 1)}}{c_r = sqrt((n - r)(n - r + 1))}, so that
+#' \deqn{\mathbf{K}_n\mathbf{K}_n^\top = \mathbf{I}_{n-1}, \qquad \mathbf{K}_n\mathbf{1}_n = \mathbf{0}, \qquad
+#'   \mathbf{K}_n^\top\mathbf{K}_n = \mathbf{I}_n - \frac{1}{n}\mathbf{J}_n.}{K K' = I, K 1 = 0, K' K = I - J/n.}
 #'
-#' @author
-#' \enumerate{
-#'     \item Muhammad Yaseen (\email{myaseen208@gmail.com})
-#'    }
-#'
+#' @param n number of columns (at least 2).
+#' @return The \eqn{(n - 1) \times n}{(n - 1) x n} matrix \eqn{\mathbf{K}_n}{K_n}.
 #' @references
-#'  Crossa, J., Perez-Elizalde, S., Jarquin, D., Cotes, J.M., Viele, K., Liu, G., and Cornelius, P.L. (2011)
-#'  Bayesian Estimation of the Additive Main Effects and Multiplicative Interaction Model
-#'  \emph{Crop Science}, \strong{51}, 1458–1469.
-#'  (\href{https://acsess.onlinelibrary.wiley.com/doi/abs/10.2135/cropsci2010.06.0343}{doi: 10.2135/cropsci2010.06.0343})
-#'
+#' Crossa, J., Perez-Elizalde, S., Jarquin, D., Cotes, J. M., Viele, K., Liu, G. and Cornelius, P. L. (2011).
+#' Bayesian estimation of the additive main effects and multiplicative interaction model. \emph{Crop Science},
+#' \strong{51}(4), 1458--1469. \doi{10.2135/cropsci2010.06.0343}
+#' @author Muhammad Yaseen (\email{myaseen208@@gmail.com})
+#' @seealso \code{\link{orthnorm}}
+#' @examples
+#' K <-
+#'   matrix_k(
+#'     n = 4
+#'   )
+#' K
+#' round(x = K %*% t(K), digits = 10)
 #' @export
+matrix_k <- function(n) UseMethod("matrix_k")
 
-
-matrix_k <- function(n){
-  UseMethod("matrix_k")
-}
-
-
-#' @export
 #' @rdname matrix_k
-
-
-matrix_k.default <- function(n){
-  m <- matrix(0, nrow = (n-1), ncol = n)
-  long <- sqrt((n - (0:(n-2)) - 1) * (n - (0:(n-2))))
-  diag(m) <- (n - (0:(n-2)) - 1)
+#' @export
+matrix_k.default <- function(n) {
+  n <- .bam_check_number(n, "n", "matrix_k", min = 2, integer = TRUE)
+  m <- matrix(0, nrow = n - 1L, ncol = n)
+  r <- seq_len(n - 1L)
   m[upper.tri(m)] <- -1
-  m / long[row(m)]
+  diag(m) <- n - r
+  m / sqrt((n - r) * (n - r + 1))
 }

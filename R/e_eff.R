@@ -1,90 +1,35 @@
-#' @name    e_eff
-#' @aliases e_eff
-#' @title   Environment Effects
-#' @description Calcuates Environment Effects
+#' Environment effects
 #'
-#' @param .data  data.frame
-#' @param .y     Response Variable
-#' @param .gen   Genotypes Factor
-#' @param .env   Environment Factor
+#' @description
+#' \code{e_eff()} computes the environment main effects, the deviations of the environment means from the grand mean.
 #'
-#' @return Environment Effects
+#' @details
+#' \deqn{\hat{\delta}_j = \bar{y}_{\cdot j} - \bar{y}, \qquad \bar{y}_{\cdot j} = \frac{1}{G}\sum_i
+#'   \bar{y}_{ij}.}{delta_j = y_.j - ybar, y_.j = sum_i y_ij / G.}
 #'
-#' @author
-#' \enumerate{
-#'     \item Muhammad Yaseen (\email{myaseen208@@gmail.com})
-#'    }
-#'
+#' @inheritParams ge_mean
+#' @return An \eqn{E \times 1}{E x 1} matrix with column \code{EEffs} (row names: environments).
 #' @references
-#'  Crossa, J., Perez-Elizalde, S., Jarquin, D., Cotes, J.M., Viele, K., Liu, G., and Cornelius, P.L. (2011)
-#'  Bayesian Estimation of the Additive Main Effects and Multiplicative Interaction Model
-#'  \emph{Crop Science}, \strong{51}, 1458–1469.
-#'  (\href{https://acsess.onlinelibrary.wiley.com/doi/abs/10.2135/cropsci2010.06.0343}{doi: 10.2135/cropsci2010.06.0343})
-#'
-#' @import rlang
-#' @import tidyr
-#' @importFrom  dplyr select group_by count
-#' @importFrom magrittr %>%
-#'
-#' @export
-#'
+#' Crossa, J., Perez-Elizalde, S., Jarquin, D., Cotes, J. M., Viele, K., Liu, G. and Cornelius, P. L. (2011).
+#' Bayesian estimation of the additive main effects and multiplicative interaction model. \emph{Crop Science},
+#' \strong{51}(4), 1458--1469. \doi{10.2135/cropsci2010.06.0343}
+#' @author Muhammad Yaseen (\email{myaseen208@@gmail.com})
+#' @seealso \code{\link{g_eff}}, \code{\link{ge_eff}}
 #' @examples
-#'
 #' data(Maiz)
 #' e_eff(
-#'     .data  = Maiz
-#'    , .y    = y
-#'    , .gen  = entry
-#'    , .env  = site
-#'    )
-#'
-#'
-
-if(getRversion() >= "2.15.1"){
-  utils::globalVariables(
-    c(
-      "Env"
-      , "Y"
-      , "EMean"
-      , "."
-      , "EEffs"
-    )
-  )
-}
-
-
-e_eff <- function(.data, .y, .gen, .env) {
-  UseMethod("e_eff")
-}
-
-
+#'     .data = Maiz
+#'   , .y    = y
+#'   , .gen  = entry
+#'   , .env  = site
+#'   )
 #' @export
+e_eff <- function(.data, .y, .gen, .env) UseMethod("e_eff")
+
 #' @rdname e_eff
-
-e_eff.default <-
-  function(.data, .y, .gen, .env){
-
-
-    .y    <- deparse(substitute(.y))
-    .gen  <- deparse(substitute(.gen))
-    .env  <- deparse(substitute(.env))
-
-    df1 <- tibble::as_tibble(data.frame(
-      Env = factor(.data[[.env]])
-      , Gen = factor(.data[[.gen]])
-      , Y   = .data[[.y]]
-    ))
-
-
-    e_effects <-
-      df1 %>%
-      dplyr::group_by(Env) %>%
-      dplyr::summarise(EMean = mean(Y)) %>%
-      dplyr::ungroup() %>%
-      dplyr::mutate(EEffs = EMean - mean(EMean)) %>%
-      dplyr::ungroup() %>%
-      dplyr::select(EEffs) %>%
-      as.matrix()
-
-    return(e_effects)
+#' @export
+e_eff.default <- function(.data, .y, .gen, .env) {
+  cd <- .bam_prep("e_eff", .data, substitute(.y), substitute(.gen), substitute(.env), NULL, parent.frame(),
+                  need_rep = FALSE)
+  matrix(colMeans(cd$Y) - mean(cd$Y), ncol = 1L, dimnames = list(cd$E, "EEffs"))
 }

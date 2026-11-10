@@ -1,0 +1,4 @@
+id,source,quantity,call,extract,value,digits,level,note
+crossa2011_ls_lambda1,"Crossa et al. (2011), Crop Science 51, p. 1463",least-squares lambda_1 of the maize data,"ge_ammi(.data = Maiz, .y = y, .gen = entry, .env = site, .rep = rep)",x$lambdas[1],5923,0,1,
+crossa2011_ls_lambda2,"Crossa et al. (2011), Crop Science 51, p. 1463",least-squares lambda_2 of the maize data,"ge_ammi(.data = Maiz, .y = y, .gen = entry, .env = site, .rep = rep)",x$lambdas[2],3070,0,1,
+crossa2011_mean,"Crossa et al. (2011), Crop Science 51, Table 1",grand mean of the maize data (posterior mean 4858),"ge_mean(.data = Maiz, .y = y, .gen = entry, .env = site)",x$grand_mean,4858,0,1,

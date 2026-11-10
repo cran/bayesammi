@@ -3,53 +3,74 @@
 \name{ge_ammi}
 \alias{ge_ammi}
 \alias{ge_ammi.default}
-\title{AMMI of Genotype by Environment Interaction Model}
+\title{Least-squares AMMI model}
 \usage{
 ge_ammi(.data, .y, .gen, .env, .rep)
 
 \method{ge_ammi}{default}(.data, .y, .gen, .env, .rep)
 }
 \arguments{
-\item{.data}{data.frame}
+\item{.data}{a data frame with one row per plot.}
 
-\item{.y}{Response Variable}
-
-\item{.gen}{Genotypes Factor}
-
-\item{.env}{Environment Factor}
-
-\item{.rep}{Replication Factor}
+\item{.y, .gen, .env, .rep}{the columns of the response, genotypes, environments and replicates: bare names, strings
+or vectors.}
 }
 \value{
-Genotype by Environment Interaction Model
+A list (class \code{c("bam_ge_ammi", "bam_result", "list")}) with the components of the earlier versions:
+\describe{
+  \item{\code{g}, \code{e}, \code{Rep}, \code{k}}{numbers of genotypes, environments, replicates and axes.}
+  \item{\code{ge_means}}{the result of \code{\link{ge_mean}()}.}
+  \item{\code{mu}, \code{sigma2}, \code{tau}}{grand mean, error variance and its reciprocal (precision).}
+  \item{\code{tao}, \code{delta}}{genotype and environment effects (\code{\link{g_eff}()}, \code{\link{e_eff}()}).}
+  \item{\code{lambdas}, \code{alphas}, \code{gammas}}{singular values and genotype and environment singular
+    vectors of the interaction.}
+}
 }
 \description{
-Performs Additive Main Effects and Multiplication Interaction Analysis of Genotype by Environment Interaction Model
+\code{ge_ammi()} computes the least-squares estimates of the AMMI model with all interaction axes: grand mean,
+genotype and environment effects, singular values and vectors of the interaction, and the error variance. They
+are the starting values of \code{\link{bayes_ammi}()} and the classical estimates it is compared with.
+}
+\details{
+With the cell means \eqn{\bar{y}_{ij}}{y_ij} of \eqn{B}{B} replicates, \eqn{\hat{\mu} = \bar{y}}{mu = ybar},
+\eqn{\hat{\tau}_i = \bar{y}_{i\cdot} - \bar{y}}{tau_i = y_i. - ybar}, \eqn{\hat{\delta}_j = \bar{y}_{\cdot j} -
+\bar{y}}{delta_j = y_.j - ybar} and the singular value decomposition of the interaction effects
+(\code{\link{ge_eff}()}), \eqn{K = \min(G, E) - 1}{K = min(G, E) - 1} axes. The error variance is the residual
+variance of the model with random replicates within environments (\code{\link{ge_model}()}), in closed form for
+balanced data:
+\deqn{\hat{\sigma}^2 = \frac{\mathrm{SSW} - \mathrm{SS}_{B(E)}}{E(B - 1)(G - 1)}}{sigma^2 = (SSW - SS_B(E)) /
+  (E (B - 1) (G - 1))}
+when the replicate mean square is not smaller, otherwise (the replicate variance component estimated as zero)
+\eqn{\mathrm{SSW}/(GE(B - 1))}{SSW / (GE (B - 1))}; SSW is the within-cell and \eqn{\mathrm{SS}_{B(E)}}{SS_B(E)}
+the replicate-within-environment sum of squares.
+
+\strong{Change from the earlier versions.} The error variance came from \code{lme4::lmer()}; the closed form gives
+the same value for balanced data without needing \pkg{lme4}.
 }
 \examples{
-
 data(Maiz)
-fm1 <-
-   ge_ammi(
-      .data  = Maiz
-     , .y    = y
-     , .gen  = entry
-     , .env  = site
-     , .rep  = rep
-     )
-
-
-
-
+fit <-
+  ge_ammi(
+      .data = Maiz
+    , .y    = y
+    , .gen  = entry
+    , .env  = site
+    , .rep  = rep
+    )
+fit$lambdas
+fit$sigma2
 }
 \references{
-Crossa, J., Perez-Elizalde, S., Jarquin, D., Cotes, J.M., Viele, K., Liu, G., and Cornelius, P.L. (2011)
- Bayesian Estimation of the Additive Main Effects and Multiplicative Interaction Model
- \emph{Crop Science}, \strong{51}, 1458–1469.
- (\href{https://acsess.onlinelibrary.wiley.com/doi/abs/10.2135/cropsci2010.06.0343}{doi: 10.2135/cropsci2010.06.0343})
+Crossa, J., Perez-Elizalde, S., Jarquin, D., Cotes, J. M., Viele, K., Liu, G. and Cornelius, P. L. (2011).
+Bayesian estimation of the additive main effects and multiplicative interaction model. \emph{Crop Science},
+\strong{51}(4), 1458--1469. \doi{10.2135/cropsci2010.06.0343}
+
+Gauch, H. G. (1992). \emph{Statistical Analysis of Regional Yield Trials: AMMI Analysis of Factorial Designs}.
+Elsevier, Amsterdam.
+}
+\seealso{
+\code{\link{bayes_ammi}}, \code{\link{ge_eff}}
 }
 \author{
-\enumerate{
-    \item Muhammad Yaseen (\email{myaseen208@gmail.com})
-   }
+Muhammad Yaseen (\email{myaseen208@gmail.com})
 }

@@ -1,0 +1,345 @@
+---
+title: "Decision tools for breeders"
+author: "Muhammad Yaseen"
+date: last-modified
+format:
+  html:
+    self-contained: true
+    number-sections: true
+    toc: true
+    toc-depth: 3
+    highlight-style: pygments
+    code-tools: true
+    html-math-method: mathjax
+vignette: >
+  %\VignetteIndexEntry{Decision tools for breeders}
+  %\VignetteEngine{quarto::html}
+  %\VignetteEncoding{UTF-8}
+execute:
+  echo: true
+  warning: false
+  message: false
+---
+
+{{< include _bayesammi-macros.txt >}}
+
+```{r setup, include = FALSE}
+# HTML figures are drawn as PNG and kept as WebP: lossless (the same pixels in about half the space of PNG), or
+# lossy at quality 90 when that is less than half the size, as for traces and densities of thousands of draws. The
+# PDF figures stay vector graphics. Any failure of magick (not installed, no WebP, or a broken installation whose
+# system libraries are missing) keeps the PNG
+webp <- function(path) {
+  if (knitr::is_latex_output() || !grepl(pattern = "[.]png$", x = path)) return(path)
+  tryCatch(
+      {
+        if (!requireNamespace("magick", quietly = TRUE) || !isTRUE(magick::magick_config()$webp)) return(path)
+        img <- magick::image_read(path)
+        out <- sub(pattern = "[.]png$", replacement = ".webp", x = path)
+        tmp <- tempfile(fileext = ".webp")
+        magick::image_write(
+            image   = img
+          , path    = out
+          , format  = "webp"
+          , quality = 100
+          , defines = c(`webp:lossless` = "true")
+          )
+        magick::image_write(image = img, path = tmp, format = "webp", quality = 90)
+        if (file.size(tmp) < file.size(out) / 2) file.copy(from = tmp, to = out, overwrite = TRUE)
+        unlink(c(path, tmp))
+        out
+      }
+    , error = function(e) path
+    )
+}
+knitr::opts_chunk$set(collapse = FALSE, comment = "", fig.width = 7, fig.height = 4.8,
+                      dev = if (knitr::is_latex_output()) "cairo_pdf" else "ragg_png", dpi = 96,
+                      fig.process = webp)
+if (requireNamespace("bayesammi", quietly = TRUE)) library(bayesammi) else
+  pkgload::load_all(export_all = FALSE, helpers = FALSE, quiet = TRUE)
+```
+
+# Abstract
+
+A posterior sample answers the questions a breeder asks in probabilities: how likely is a genotype to be among the
+best, how stable is it, and what yield can be expected in a cell that was never grown. This vignette goes through
+`bam_superiority()`, `bam_ranks()`, `bam_stability()`, `bam_predict()` and `bam_winners()`, and through the model
+choice tools `bam_compare()` and `bam_ppc()`.
+
+```{r fit}
+fit <-
+  bayes_ammi(
+      .data   = Maiz
+    , .y      = y
+    , .gen    = entry
+    , .env    = site
+    , .rep    = rep
+    , .nIter  = 4000
+    , .k      = 2
+    , .burnin = 1000
+    , .thin   = 1
+    , .chains = 2
+    , .priors = bam_priors(
+          mu_mean     = 0
+        , mu_var      = 1e+8
+        , tau_mean    = 0
+        , tau_var     = 1e+8
+        , delta_mean  = 0
+        , delta_var   = 1e+8
+        , lambda_mean = 0
+        , lambda_var  = 1e+8
+        , nu          = 1
+        , s2          = NULL
+        )
+    , .level  = 0.95
+    , .seed   = 9
+    , .align  = TRUE
+    , .model  = "AMMI"
+    , .het    = FALSE
+    , .waic   = TRUE
+    )
+```
+
+# Probabilities of superior performance and stability
+
+Dias et al. (2022) select the best $s$ fraction of $G$ genotypes, that is $\lceil sG \rceil$ of them, in every
+draw. Write $\bar{\eta}_{i\cdot}$ for the mean of genotype $i$ over the environments and
+$\sigma^2_{GE,i} = \frac{1}{E}\sum_j(\eta_{ij} - \bar{\eta}_{i\cdot} - \bar{\eta}_{\cdot j} +
+\bar{\eta}_{\cdot\cdot})^2$ for its interaction variance. Then
+
+* the probability of superior performance is the share of draws in which $\bar{\eta}_{i\cdot}$ is among the
+  best $\lceil sG \rceil$;
+* the probability of superior stability is the share in which $\sigma^2_{GE,i}$ is among the smallest
+  $\lceil sG \rceil$;
+* the joint probability is their product;
+* the conditional probability is the probability of superior performance within each environment;
+* the pairwise probability is $P(\bar{\eta}_{i\cdot} > \bar{\eta}_{i'\cdot})$.
+
+```{r sup}
+sp <-
+  bam_superiority(
+      fit           = fit
+    , .s            = 0.2
+    , higher_better = TRUE
+    )
+sp
+```
+
+```{r sup-plots, fig.height = 4.4}
+plot(x = sp, which = "marginal")
+plot(x = sp, which = "pairwise")
+```
+
+```{r sup-cond, fig.height = 4.8}
+plot(x = sp, which = "conditional")
+```
+
+# Posterior ranks
+
+```{r ranks}
+rk <-
+  bam_ranks(
+      fit           = fit
+    , higher_better = TRUE
+    , .env          = NULL
+    )
+rk
+```
+
+```{r ranks-plot, fig.height = 4.6}
+plot(x = rk)
+```
+
+The tile of genotype $i$ and rank $r$ shows $P(\text{rank}_i = r)$. A rank interval that spans several places is
+the honest answer to "which is second?". Ranks within one environment come from `.env`:
+
+```{r ranks-env}
+bam_ranks(
+    fit           = fit
+  , higher_better = TRUE
+  , .env          = "12"
+  )$summary[1:3]
+```
+
+# Bayesian stability
+
+`bam_stability()` gives the posterior of two stability measures for every genotype: the interaction variance of
+Shukla (1972), and the AMMI stability value of Purchase et al. (2000),
+$$\mathrm{ASV}_i = \sqrt{\left(\frac{\lambda_1}{\lambda_2}\,\lambda_1^{1/2}\alpha_{i1}\right)^2 +
+(\lambda_2^{1/2}\alpha_{i2})^2}.$$
+The weight $\lambda_1/\lambda_2$ becomes unstable when $\lambda_2$ is drawn near zero, so it is computed from the
+posterior means of $\lambda_1$ and $\lambda_2$, and the scores from each draw. The yield stability index (YSI) adds
+the mean rank of the yield to the mean rank of the ASV; small is good.
+
+```{r stab}
+st <-
+  bam_stability(
+      fit           = fit
+    , higher_better = TRUE
+    )
+st
+```
+
+```{r stab-plot, fig.height = 5}
+plot(x = st)
+```
+
+# Predictions
+
+```{r pred}
+pr <-
+  bam_predict(
+      fit    = fit
+    , .level = 0.95
+    )
+pr$genotypes
+```
+
+```{r pred-plot, fig.height = 4.4}
+plot(x = pr, which = "genotypes")
+```
+
+# Which genotype wins where
+
+```{r win}
+bam_winners(
+    fit           = fit
+  , higher_better = TRUE
+  )$mega
+```
+
+# Model choice
+
+## Information criteria
+
+`bayes_ammi()` stores the deviance information criterion (DIC; Spiegelhalter et al. 2002) and the widely applicable
+information criterion (WAIC; Watanabe 2010) of the observed plots. Both are computed while the chains run, so no
+draws need to be kept. `bam_compare()` puts several fits side by side:
+
+```{r compare}
+fits <-
+  lapply(
+      X   = 1:3
+    , FUN = function(K) {
+        bayes_ammi(
+            .data   = Maiz
+          , .y      = y
+          , .gen    = entry
+          , .env    = site
+          , .rep    = rep
+          , .nIter  = 2000
+          , .k      = K
+          , .burnin = 500
+          , .thin   = 1
+          , .chains = 1
+          , .priors = bam_priors(
+                mu_mean     = 0
+              , mu_var      = 1e+8
+              , tau_mean    = 0
+              , tau_var     = 1e+8
+              , delta_mean  = 0
+              , delta_var   = 1e+8
+              , lambda_mean = 0
+              , lambda_var  = 1e+8
+              , nu          = 1
+              , s2          = NULL
+              )
+          , .level  = 0.95
+          , .seed   = 9
+          , .align  = TRUE
+          , .model  = "AMMI"
+          , .het    = TRUE
+          , .waic   = TRUE
+          )
+      }
+    )
+names(fits) <- paste0("K", 1:3)
+cp <- do.call(what = bam_compare, args = fits)
+cp
+```
+
+```{r compare-plot, fig.height = 3.6}
+plot(x = cp)
+```
+
+```{r kk, include = FALSE}
+t <- cp$table
+```
+
+WAIC estimates the deviance of new plots of the same genotypes and environments (Gelman et al. 2014). `se` is the
+standard error of each WAIC; `dWAIC_se` is the standard error of the difference from the best model, computed from
+the plot-by-plot differences, and is the one to use when comparing (Vehtari et al. 2017). Here `r t$model[1]` has the
+smallest WAIC; `r t$model[2]` is `r round(t$dWAIC[2], 1)` above it, `r round(t$dWAIC[2] / t$dWAIC_se[2], 1)` standard
+errors of the difference, and `r t$model[3]` is `r round(t$dWAIC[3], 1)` above
+(`r round(t$dWAIC[3] / t$dWAIC_se[3], 1)` standard errors). The column `lambda_last_lower` adds the posterior view:
+the HPD interval of the last singular value of `r t$model[1]` reaches down to `r signif(t$lambda_last_lower[1], 2)`,
+so a term whose interval nearly reaches zero improves prediction little and is weakly supported. Prefer the simplest
+model among those that the standard errors do not separate.
+
+## Posterior predictive checks
+
+`bam_ppc()` simulates replicated trials from the posterior and compares statistics of the data with their replicated
+distribution (Gelman et al. 1996). A posterior predictive p-value near 0 or 1 marks a feature of the data the model
+does not reproduce.
+
+```{r ppc}
+pp <-
+  bam_ppc(
+      fit    = fit
+    , .draws = 500
+    , .seed  = 2
+    )
+pp
+```
+
+```{r ppc-plot, fig.height = 5.5}
+plot(x = pp)
+```
+
+# Working with posterior, bayesplot and coda
+
+The draws convert to the formats of **posterior** and **coda**, so the plots of **bayesplot** apply:
+
+```{r bayesplot, fig.height = 3.6}
+dr <- posterior::as_draws_df(x = fit)
+posterior::summarise_draws(.x = posterior::subset_draws(x = dr, variable = c("lambda[1]", "lambda[2]", "sigma2")))
+bayesplot::mcmc_areas(x = fit$draws, pars = c("tau[4]", "tau[5]", "tau[6]"), prob = 0.95)
+```
+
+# Interpretation
+
+```{r int}
+bam_interpret(
+    x             = sp
+  , higher_better = TRUE
+  , top           = 5
+  )
+bam_interpret(
+    x             = st
+  , higher_better = TRUE
+  , top           = 5
+  )
+```
+
+# References
+
+Dias, K. O. G., dos Santos, J. P. R., Krause, M. D., Piepho, H.-P., Guimaraes, L. J. M., Pastina, M. M. and Garcia, A. A. F. (2022). Leveraging probability concepts for cultivar recommendation in multi-environment trials. *Theoretical and Applied Genetics*. doi:10.1007/s00122-022-04041-y
+
+Shukla, G. K. (1972). Some statistical aspects of partitioning genotype-environmental components of variability. *Heredity*, 29(2), 237--245.
+
+Purchase, J. L., Hatting, H. and van Deventer, C. S. (2000). Genotype x environment interaction of winter wheat in South Africa: II. Stability analysis of yield performance. *South African Journal of Plant and Soil*, 17(3), 101--107.
+
+Spiegelhalter, D. J., Best, N. G., Carlin, B. P. and van der Linde, A. (2002). Bayesian measures of model complexity and fit. *Journal of the Royal Statistical Society B*, 64(4), 583--639.
+
+Watanabe, S. (2010). Asymptotic equivalence of Bayes cross validation and widely applicable information criterion in singular learning theory. *Journal of Machine Learning Research*, 11, 3571--3594.
+
+Gelman, A., Hwang, J. and Vehtari, A. (2014). Understanding predictive information criteria for Bayesian models. *Statistics and Computing*, 24(6), 997--1016.
+
+Vehtari, A., Gelman, A. and Gabry, J. (2017). Practical Bayesian model evaluation using leave-one-out cross-validation and WAIC. *Statistics and Computing*, 27(5), 1413--1432.
+
+Gelman, A., Meng, X.-L. and Stern, H. (1996). Posterior predictive assessment of model fitness via realized discrepancies. *Statistica Sinica*, 6(4), 733--807.
+
+Gabry, J., Simpson, D., Vehtari, A., Betancourt, M. and Gelman, A. (2019). Visualization in Bayesian workflow. *Journal of the Royal Statistical Society A*, 182(2), 389--402.
+
+Vehtari, A., Gelman, A., Simpson, D., Carpenter, B. and Burkner, P.-C. (2021). Rank-normalization, folding, and localization: an improved R-hat for assessing convergence of MCMC. *Bayesian Analysis*, 16(2), 667--718.
+
+Crossa, J., Perez-Elizalde, S., Jarquin, D., Cotes, J. M., Viele, K., Liu, G. and Cornelius, P. L. (2011). Bayesian estimation of the additive main effects and multiplicative interaction model. *Crop Science*, 51(4), 1458--1469. doi:10.2135/cropsci2010.06.0343

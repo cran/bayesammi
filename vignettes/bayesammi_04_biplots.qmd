@@ -1,0 +1,181 @@
+---
+title: "Inference on the biplot"
+author: "Muhammad Yaseen"
+date: last-modified
+format:
+  html:
+    self-contained: true
+    number-sections: true
+    toc: true
+    toc-depth: 3
+    highlight-style: pygments
+    code-tools: true
+    html-math-method: mathjax
+vignette: >
+  %\VignetteIndexEntry{Inference on the biplot}
+  %\VignetteEngine{quarto::html}
+  %\VignetteEncoding{UTF-8}
+execute:
+  echo: true
+  warning: false
+  message: false
+---
+
+{{< include _bayesammi-macros.txt >}}
+
+```{r setup, include = FALSE}
+# HTML figures are drawn as PNG and kept as WebP: lossless (the same pixels in about half the space of PNG), or
+# lossy at quality 90 when that is less than half the size, as for traces and densities of thousands of draws. The
+# PDF figures stay vector graphics. Any failure of magick (not installed, no WebP, or a broken installation whose
+# system libraries are missing) keeps the PNG
+webp <- function(path) {
+  if (knitr::is_latex_output() || !grepl(pattern = "[.]png$", x = path)) return(path)
+  tryCatch(
+      {
+        if (!requireNamespace("magick", quietly = TRUE) || !isTRUE(magick::magick_config()$webp)) return(path)
+        img <- magick::image_read(path)
+        out <- sub(pattern = "[.]png$", replacement = ".webp", x = path)
+        tmp <- tempfile(fileext = ".webp")
+        magick::image_write(
+            image   = img
+          , path    = out
+          , format  = "webp"
+          , quality = 100
+          , defines = c(`webp:lossless` = "true")
+          )
+        magick::image_write(image = img, path = tmp, format = "webp", quality = 90)
+        if (file.size(tmp) < file.size(out) / 2) file.copy(from = tmp, to = out, overwrite = TRUE)
+        unlink(c(path, tmp))
+        out
+      }
+    , error = function(e) path
+    )
+}
+knitr::opts_chunk$set(collapse = FALSE, comment = "", fig.width = 7, fig.height = 5.5,
+                      dev = if (knitr::is_latex_output()) "cairo_pdf" else "ragg_png", dpi = 96,
+                      fig.process = webp)
+if (requireNamespace("bayesammi", quietly = TRUE)) library(bayesammi) else
+  pkgload::load_all(export_all = FALSE, helpers = FALSE, quiet = TRUE)
+```
+
+# Abstract
+
+A least-squares AMMI biplot shows point estimates only. Its Bayesian counterpart gives every genotype and environment
+a highest posterior density (HPD) region. A region that contains the origin marks a stable genotype or environment,
+regions that overlap mark a homogeneous group, and the marginal interval on the first term decides the direction of
+the interaction. This vignette shows how `biplots()` builds the regions and how to read them.
+
+# The coordinates
+
+For draw $s$ the point of genotype $i$ is
+$\left(\lambda_1^{(s)1/2}\alpha^{(s)}_{i1}, \lambda_2^{(s)1/2}\alpha^{(s)}_{i2}\right)$. The draws
+of a genotype form a cloud whose shape shows the uncertainty of its interaction.
+
+```{r fit}
+fit <-
+  bayes_ammi(
+      .data   = Maiz
+    , .y      = y
+    , .gen    = entry
+    , .env    = site
+    , .rep    = rep
+    , .nIter  = 6000
+    , .k      = 2
+    , .burnin = 1000
+    , .thin   = 1
+    , .chains = 2
+    , .priors = bam_priors(
+          mu_mean     = 0
+        , mu_var      = 1e+8
+        , tau_mean    = 0
+        , tau_var     = 1e+8
+        , delta_mean  = 0
+        , delta_var   = 1e+8
+        , lambda_mean = 0
+        , lambda_var  = 1e+8
+        , nu          = 1
+        , s2          = NULL
+        )
+    , .level  = 0.95
+    , .seed   = 4
+    , .align  = TRUE
+    , .model  = "AMMI"
+    , .het    = FALSE
+    , .waic   = TRUE
+    )
+```
+
+# HPD regions
+
+A bivariate kernel density $\hat{f}$ is estimated from the cloud. The $100(1-p)\%$ HPD region is the set where
+$\hat{f}$ exceeds the $p$-quantile of $\hat{f}$ at the draws, so it holds $100(1-p)\%$ of them and is the
+smallest such set (Hyndman 1996). It contains the origin exactly when $\hat{f}(\mathbf{0})$ reaches that
+quantile.
+
+```{r regions, fig.width = 9}
+bp <-
+  biplots(
+      model         = fit
+    , burnin        = 0
+    , thin          = 0.5
+    , pb            = c(0.05, 0.01)
+    , plot_stable   = TRUE
+    , plot_unstable = TRUE
+    , ncolors       = 5
+    , .which        = "both"
+    , .grid         = 100
+    )
+bp$biplot
+```
+
+# Stable genotypes and environments
+
+```{r stable}
+bp$biplot_data[, list(byplot, name, x, y, stable, axis1_lower, axis1_upper, group)]
+```
+
+* `stable = TRUE`: the 95% region contains the origin, so the interaction of the genotype (environment) is not
+  different from zero on the two terms jointly.
+* `group`: the marginal 95% HPD interval of the first coordinate. "positive" and "negative" groups interact in
+  opposite directions; the paper uses this criterion.
+
+A genotype can be stable in the joint sense and still have a first coordinate that differs from zero. This happens
+when the second term is so uncertain that the region stretches over the origin along the second axis.
+
+# Only the unstable ones
+
+```{r unstable, fig.width = 9}
+bp_u <-
+  biplots(
+      model         = fit
+    , burnin        = 0
+    , thin          = 0.5
+    , pb            = 0.05
+    , plot_stable   = FALSE
+    , plot_unstable = TRUE
+    , ncolors       = 5
+    , .which        = "both"
+    , .grid         = 100
+    )
+bp_u$biplot
+```
+
+# Reading genotype and environment together
+
+A genotype yields more than its main effects predict in environments whose first scores have the same sign as its
+own, and less where the signs differ. The genotypes in the positive group are therefore adapted to the environments
+in the positive group.
+
+```{r int}
+bam_interpret(
+    x             = bp
+  , higher_better = TRUE
+  , top           = 5
+  )
+```
+
+# References
+
+Crossa, J., Perez-Elizalde, S., Jarquin, D., Cotes, J. M., Viele, K., Liu, G. and Cornelius, P. L. (2011). Bayesian estimation of the additive main effects and multiplicative interaction model. *Crop Science*, 51(4), 1458--1469. doi:10.2135/cropsci2010.06.0343
+
+Hyndman, R. J. (1996). Computing and graphing highest density regions. *The American Statistician*, 50(2), 120--126.

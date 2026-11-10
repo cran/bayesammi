@@ -1,0 +1,204 @@
+---
+title: "Convergence of the chains"
+author: "Muhammad Yaseen"
+date: last-modified
+format:
+  html:
+    self-contained: true
+    number-sections: true
+    toc: true
+    toc-depth: 3
+    highlight-style: pygments
+    code-tools: true
+    html-math-method: mathjax
+vignette: >
+  %\VignetteIndexEntry{Convergence of the chains}
+  %\VignetteEngine{quarto::html}
+  %\VignetteEncoding{UTF-8}
+execute:
+  echo: true
+  warning: false
+  message: false
+---
+
+{{< include _bayesammi-macros.txt >}}
+
+```{r setup, include = FALSE}
+# HTML figures are drawn as PNG and kept as WebP: lossless (the same pixels in about half the space of PNG), or
+# lossy at quality 90 when that is less than half the size, as for traces and densities of thousands of draws. The
+# PDF figures stay vector graphics. Any failure of magick (not installed, no WebP, or a broken installation whose
+# system libraries are missing) keeps the PNG
+webp <- function(path) {
+  if (knitr::is_latex_output() || !grepl(pattern = "[.]png$", x = path)) return(path)
+  tryCatch(
+      {
+        if (!requireNamespace("magick", quietly = TRUE) || !isTRUE(magick::magick_config()$webp)) return(path)
+        img <- magick::image_read(path)
+        out <- sub(pattern = "[.]png$", replacement = ".webp", x = path)
+        tmp <- tempfile(fileext = ".webp")
+        magick::image_write(
+            image   = img
+          , path    = out
+          , format  = "webp"
+          , quality = 100
+          , defines = c(`webp:lossless` = "true")
+          )
+        magick::image_write(image = img, path = tmp, format = "webp", quality = 90)
+        if (file.size(tmp) < file.size(out) / 2) file.copy(from = tmp, to = out, overwrite = TRUE)
+        unlink(c(path, tmp))
+        out
+      }
+    , error = function(e) path
+    )
+}
+knitr::opts_chunk$set(collapse = FALSE, comment = "", fig.width = 7, fig.height = 5,
+                      dev = if (knitr::is_latex_output()) "cairo_pdf" else "ragg_png", dpi = 96,
+                      fig.process = webp)
+if (requireNamespace("bayesammi", quietly = TRUE)) library(bayesammi) else
+  pkgload::load_all(export_all = FALSE, helpers = FALSE, quiet = TRUE)
+```
+
+# Abstract
+
+Posterior summaries are valid only after the chains have reached their stationary distribution and are long enough.
+Crossa et al. (2011) used three diagnostics: Raftery and Lewis (1995), Heidelberger and Welch (1983) and Gelman and
+Rubin (1992). `bayes_ammi()` computes all three, together with effective sample sizes, through the package
+**coda**.
+
+# Several chains
+
+```{r fit}
+fit <-
+  bayes_ammi(
+      .data   = Maiz
+    , .y      = y
+    , .gen    = entry
+    , .env    = site
+    , .rep    = rep
+    , .nIter  = 4000
+    , .k      = 2
+    , .burnin = 1000
+    , .thin   = 1
+    , .chains = 3
+    , .priors = bam_priors(
+          mu_mean     = 0
+        , mu_var      = 1e+8
+        , tau_mean    = 0
+        , tau_var     = 1e+8
+        , delta_mean  = 0
+        , delta_var   = 1e+8
+        , lambda_mean = 0
+        , lambda_var  = 1e+8
+        , nu          = 1
+        , s2          = NULL
+        )
+    , .level  = 0.95
+    , .seed   = 5
+    , .align  = TRUE
+    , .model  = "AMMI"
+    , .het    = FALSE
+    , .waic   = TRUE
+    )
+```
+
+The first chain starts at the least-squares fit and the others at dispersed values (singular values scaled by
+factors between 0.5 and 1.5, perturbed scores, error variance scaled between 0.5 and 2).
+
+# Traces
+
+```{r trace, fig.height = 6}
+plot(x = fit, which = "trace", pars = c("mu", "sigma2", "lambda[1]", "lambda[2]", "alpha[8,1]"))
+```
+
+# Gelman-Rubin
+
+The potential scale reduction factor compares the variance between chains with the variance within them. Values
+below 1.1 (better, 1.01) indicate that the chains have mixed.
+
+```{r gelman}
+fit$diagnostics$gelman
+summary(object = fit$summary$rhat)
+```
+
+# Raftery-Lewis
+
+The dependence factor $I$ measures how much longer the chain must be than an independent sample of the same
+precision; $I > 5$ indicates strong autocorrelation.
+
+```{r raftery}
+fit$diagnostics$raftery[[1]]
+```
+
+# Heidelberger-Welch
+
+The stationarity test is applied to the whole chain, then after dropping the first 10%, 20%, ... of it. The
+half-width test asks whether the mean is estimated precisely enough. Each test has level 0.05, so among many
+parameters a few failures are expected by chance.
+
+```{r heidel}
+fit$diagnostics$heidel[[1]]
+```
+
+# Effective sample size and Monte Carlo error
+
+```{r ess}
+fit$summary[block %in% c("mu", "sigma2", "lambda"), list(parameter, mean, sd, mc_se, ess, rhat)]
+```
+
+The Monte Carlo standard error `mc_se` is $\mathrm{sd}/\sqrt{\mathrm{ess}}$. Run longer chains when it is
+not small compared with the precision you need. The weak second singular value mixes more slowly than the other
+parameters.
+
+# The draws for further analysis
+
+`fit$draws` is a `coda::mcmc.list`, so every function of **coda** applies:
+
+```{r coda}
+coda::autocorr.diag(mcmc.obj = fit$draws[, c("lambda[1]", "lambda[2]")], lags = c(1, 5, 10))
+```
+
+# posterior and bayesplot
+
+The draws also convert to a `draws_df` of **posterior**, which gives the rank-normalised $\widehat{R}$ and the bulk
+and tail effective sample sizes of Vehtari et al. (2021), and the plots of **bayesplot** take the `mcmc.list` directly
+(Gabry et al. 2019):
+
+```{r posterior}
+dr <- posterior::as_draws_df(x = fit)
+posterior::summarise_draws(
+    .x = posterior::subset_draws(x = dr, variable = c("mu", "sigma2", "lambda[1]", "lambda[2]"))
+  , "mean", "sd", "rhat", "ess_bulk", "ess_tail"
+  )
+```
+
+```{r bayesplot, fig.height = 3.4}
+bayesplot::mcmc_rank_overlay(x = fit$draws, pars = c("lambda[1]", "lambda[2]"))
+```
+
+Rank plots are flat and overlapping when the chains mix well.
+
+# Interpretation of convergence
+
+```{r int}
+bam_interpret(
+    x             = fit
+  , higher_better = TRUE
+  , top           = 5
+  )$findings[1:2]
+```
+
+# References
+
+Crossa, J., Perez-Elizalde, S., Jarquin, D., Cotes, J. M., Viele, K., Liu, G. and Cornelius, P. L. (2011). Bayesian estimation of the additive main effects and multiplicative interaction model. *Crop Science*, 51(4), 1458--1469. doi:10.2135/cropsci2010.06.0343
+
+Gelman, A. and Rubin, D. B. (1992). Inference from iterative simulation using multiple sequences. *Statistical Science*, 7(4), 457--472.
+
+Raftery, A. E. and Lewis, S. M. (1995). The number of iterations, convergence diagnostics and generic Metropolis algorithms. In W. R. Gilks, D. J. Spiegelhalter and S. Richardson (eds), *Practical Markov Chain Monte Carlo*. Chapman and Hall, London.
+
+Heidelberger, P. and Welch, P. D. (1983). Simulation run length control in the presence of an initial transient. *Operations Research*, 31(6), 1109--1144.
+
+Plummer, M., Best, N., Cowles, K. and Vines, K. (2006). CODA: convergence diagnosis and output analysis for MCMC. *R News*, 6(1), 7--11.
+
+Vehtari, A., Gelman, A., Simpson, D., Carpenter, B. and Burkner, P.-C. (2021). Rank-normalization, folding, and localization: an improved R-hat for assessing convergence of MCMC. *Bayesian Analysis*, 16(2), 667--718.
+
+Gabry, J., Simpson, D., Vehtari, A., Betancourt, M. and Gelman, A. (2019). Visualization in Bayesian workflow. *Journal of the Royal Statistical Society A*, 182(2), 389--402.

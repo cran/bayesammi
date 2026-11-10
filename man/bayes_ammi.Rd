@@ -3,261 +3,267 @@
 \name{bayes_ammi}
 \alias{bayes_ammi}
 \alias{bayes_ammi.default}
-\title{Bayesian Estimation of the Additive Main Effects and Multiplicative Interaction Model}
+\title{Bayesian estimation of the AMMI and GGE models}
 \usage{
-\method{bayes_ammi}{default}(.data, .y, .gen, .env, .rep, .nIter)
+bayes_ammi(
+  .data,
+  .y,
+  .gen,
+  .env,
+  .rep,
+  .nIter = 1000L,
+  .k = 2L,
+  .burnin = 0L,
+  .thin = 1L,
+  .chains = 1L,
+  .priors = bam_priors(),
+  .level = 0.95,
+  .seed = NULL,
+  .align = TRUE,
+  .model = c("AMMI", "GGE"),
+  .het = FALSE,
+  .waic = TRUE
+)
+
+\method{bayes_ammi}{default}(
+  .data,
+  .y,
+  .gen,
+  .env,
+  .rep,
+  .nIter = 1000L,
+  .k = 2L,
+  .burnin = 0L,
+  .thin = 1L,
+  .chains = 1L,
+  .priors = bam_priors(),
+  .level = 0.95,
+  .seed = NULL,
+  .align = TRUE,
+  .model = c("AMMI", "GGE"),
+  .het = FALSE,
+  .waic = TRUE
+)
 }
 \arguments{
-\item{.data}{data.frame}
+\item{.data}{a data frame with one row per plot.}
 
-\item{.y}{Response Variable}
+\item{.y, .gen, .env, .rep}{the columns of the response, genotypes, environments and replicates: bare names, strings
+or vectors.}
 
-\item{.gen}{Genotypes Factor}
+\item{.nIter}{number of iterations kept per chain before thinning (after the burn-in).}
 
-\item{.env}{Environment Factor}
+\item{.k}{number of bilinear terms \eqn{K}{K} (default 2, as in Crossa et al. 2011).}
 
-\item{.rep}{Replication Factor}
+\item{.burnin}{number of iterations discarded at the start of every chain (default 0).}
 
-\item{.nIter}{Number of Iterations}
+\item{.thin}{keep every \code{.thin}-th iteration (default 1).}
+
+\item{.chains}{number of chains (default 1; two or more give the Gelman-Rubin diagnostic).}
+
+\item{.priors}{the priors, from \code{\link{bam_priors}()}.}
+
+\item{.level}{probability of the HPD intervals (default 0.95).}
+
+\item{.seed}{integer seed for a reproducible run, or \code{NULL}; the random number state of the session is
+restored afterwards.}
+
+\item{.align}{keep the sign of every bilinear term (see Signs; default \code{TRUE}).}
+
+\item{.model}{\code{"AMMI"} (default) or \code{"GGE"} (sites regression).}
+
+\item{.het}{\code{FALSE} (default): one error variance; \code{TRUE}: one for every environment.}
+
+\item{.waic}{compute WAIC during sampling (default \code{TRUE}; costs one pass over the plots per kept draw).}
 }
 \value{
-Genotype by Environment Interaction Model
+An object of class \code{c("bam_bayes_ammi", "bam_result", "list")}; the components of the earlier
+  versions come first, the draws of all chains one after the other:
+\describe{
+  \item{\code{mu1}}{\code{data.table}, column \code{mu}: draws of the overall mean.}
+  \item{\code{tau1}}{\code{data.table}, column \code{tau}: draws of the error variance \eqn{\sigma^2}{sigma^2}
+    (columns \code{tau1}, ..., \code{tauE} with a variance for every environment).}
+  \item{\code{tao1}}{\code{data.table}, columns \code{tao1}, ..., \code{taoG}: draws of the genotype effects (no
+    columns for the GGE model).}
+  \item{\code{delta1}}{\code{data.table}, columns \code{delta1}, ...: draws of the environment effects.}
+  \item{\code{lambdas1}}{\code{data.table}, columns \code{lambdas1}, ...: draws of the singular values.}
+  \item{\code{alphas1}, \code{gammas1}}{matrices with columns \code{.nIter} (draw), \code{Gen} or \code{Env}
+    (number) and \code{alphas1}, ... or \code{gammas1}, ...: draws of the genotype and environment scores.}
+  \item{\code{alphas0}, \code{gammas0}}{\code{data.table}s: least-squares scores (the starting values).}
+  \item{\code{summary}}{\code{data.table}: posterior mean, standard deviation, Monte Carlo standard error, HPD
+    interval, effective sample size and potential scale reduction factor of every parameter (Tables 1 and B1
+    of Crossa et al. 2011).}
+  \item{\code{scores}}{\code{data.table}: posterior means of the biplot coordinates
+    \eqn{\lambda_k^{1/2}\alpha_{ik}}{lambda_k^(1/2) alpha_ik} and \eqn{\lambda_k^{1/2}\gamma_{jk}}{lambda_k^(1/2)
+    gamma_jk}, with the mean of every genotype and environment.}
+  \item{\code{draws}}{\code{coda::mcmc.list} of all parameters, one element per chain.}
+  \item{\code{diagnostics}}{list: \code{gelman} (potential scale reduction factors, two or more chains),
+    \code{raftery} (Raftery-Lewis dependence factors), \code{heidel} (Heidelberger-Welch stationarity and
+    half-width tests), for the overall mean, the error variance, the main effects and the singular values.}
+  \item{\code{ls}}{list: the least-squares AMMI estimates (\code{mu}, \code{tau}, \code{delta}, \code{lambda},
+    \code{alpha}, \code{gamma}, \code{sigma2}).}
+  \item{\code{fit}}{list: \code{deviance} of every kept draw, \code{Dbar}, \code{Dhat}, \code{pD}, \code{DIC},
+    and with \code{.waic = TRUE} \code{lppd}, \code{p_waic}, \code{WAIC}, \code{waic_se} and \code{waic_i}
+    (the contribution of every observed plot to WAIC, in the order of the data).}
+  \item{\code{settings}}{list: iterations, burn-in, thinning, chains, number of terms, model, variances, priors
+    (with the scale of the error variance filled in), level, seed, alignment, time used.}
+}
+  Methods: \code{print()}, \code{summary()}, \code{plot()} (\code{which = c("trace", "density", "biplot",
+  "effects")}), \code{\link{biplots}()}, \code{\link{bam_interpret}()}, the decision tools
+  (\code{\link{bam_predict}()}, \code{\link{bam_winners}()}, \code{\link{bam_superiority}()},
+  \code{\link{bam_ranks}()}, \code{\link{bam_stability}()}), \code{\link{bam_compare}()}, \code{\link{bam_ppc}()} and
+  \code{posterior::as_draws_df()} (\code{\link{bam-draws}}).
 }
 \description{
-Performs Bayesian Estimation of the Additive Main Effects and Multiplicative Interaction Model
+\code{bayes_ammi()} estimates the additive main effects and multiplicative interaction (AMMI) model of a
+multi-environment trial by the Gibbs sampler of Crossa et al. (2011), or the GGE (sites regression, SREG) model
+of Perez-Elizalde et al. (2012), for balanced or unbalanced trials, with one error variance or one for every
+environment. The sampler is compiled (C++). Every parameter (overall mean, genotype and
+environment effects, singular values, genotype and environment scores of the bilinear terms, error variance) has a
+posterior distribution, so that the biplot carries statistical inference: highest posterior density (HPD)
+regions around the scores show which genotypes and environments interact significantly and which form
+homogeneous groups (\code{\link{biplots}}).
+}
+\details{
+\strong{Model.} The response of genotype \eqn{i}{i} in replicate \eqn{l}{l} of environment \eqn{j}{j} is
+\deqn{y_{ijl} = \mu + \tau_i + \delta_j + \sum_{k=1}^{K} \lambda_k \alpha_{ik} \gamma_{jk} + e_{ijl}, \qquad
+  e_{ijl} \sim N(0, \sigma^2),}{y_ijl = mu + tau_i + delta_j + sum_k lambda_k alpha_ik gamma_jk + e_ijl, e_ijl ~
+  N(0, sigma^2),}
+with \eqn{\sum_i \tau_i = \sum_j \delta_j = 0}{sum tau_i = sum delta_j = 0}, \eqn{\lambda_1 \ge \cdots \ge
+\lambda_K > 0}{lambda_1 >= ... >= lambda_K > 0}, and genotype and environment score vectors
+\eqn{\boldsymbol{\alpha}_k}{alpha_k}, \eqn{\boldsymbol{\gamma}_k}{gamma_k} of unit length, orthogonal to
+\eqn{\mathbf{1}}{1} and to each other (\eqn{K}{K} = \code{.k}). The priors are those of \code{\link{bam_priors}()}.
+
+\strong{Conditional distributions.} With \eqn{\mathbf{Y}}{Y} the \eqn{G \times E}{G x E} table of cell means,
+\eqn{B}{B} replicates, \eqn{n = BGE}{n = BGE} observations, the orthonormal contrasts
+\eqn{\mathbf{K}_G}{K_G} of \code{\link{matrix_k}()} (\eqn{\boldsymbol{\tau} = \mathbf{K}_G^\top
+\mathbf{t}}{tau = K_G' t}) and \eqn{c_x = \sigma^2 / \sigma^2_x}{c_x = sigma^2 / v_x}, each iteration draws
+\deqn{\mu \sim N\left(\frac{n\bar{y} + c_\mu \mu_0}{n + c_\mu}, \frac{\sigma^2}{n + c_\mu}\right), \qquad
+  \mathbf{t} \sim N\left(\frac{BE\,\mathbf{K}_G\bar{\mathbf{y}}_{G} + c_\tau \mathbf{K}_G\mathbf{m}_\tau}{BE +
+  c_\tau}, \frac{\sigma^2}{BE + c_\tau}\mathbf{I}\right),}{mu ~ N((n ybar + c_mu mu0)/(n + c_mu), sigma^2/(n +
+  c_mu)); t ~ N((BE K_G ybar_G + c_tau K_G m_tau)/(BE + c_tau), sigma^2/(BE + c_tau) I),}
+the same for \eqn{\boldsymbol{\delta}}{delta} with \eqn{BG}{BG}, and for \eqn{k = 1, \ldots, K}{k = 1, ..., K}
+\deqn{\lambda_k \sim N\left(\frac{B\,\boldsymbol{\alpha}_k^\top\mathbf{Y}\boldsymbol{\gamma}_k + c_\lambda
+  \lambda_0}{B + c_\lambda}, \frac{\sigma^2}{B + c_\lambda}\right) \textrm{ on } (\lambda_{k+1},
+  \lambda_{k-1}),}{lambda_k ~ N((B alpha_k' Y gamma_k + c_lambda lambda0)/(B + c_lambda), sigma^2/(B + c_lambda))
+  on (lambda_k+1, lambda_k-1),}
+\deqn{p(\boldsymbol{\alpha}_k \mid \cdot) \propto \exp\left(\frac{B\lambda_k}{\sigma^2}
+  \boldsymbol{\alpha}_k^\top\mathbf{Y}\boldsymbol{\gamma}_k\right), \qquad p(\boldsymbol{\gamma}_k \mid \cdot)
+  \propto \exp\left(\frac{B\lambda_k}{\sigma^2}\boldsymbol{\gamma}_k^\top\mathbf{Y}^\top
+  \boldsymbol{\alpha}_k\right),}{p(alpha_k | .) ~ exp(B lambda_k / sigma^2 alpha_k' Y gamma_k), p(gamma_k | .) ~
+  exp(B lambda_k / sigma^2 gamma_k' Y' alpha_k),}
+von Mises-Fisher distributions on the unit sphere of the subspace orthogonal to \eqn{\mathbf{1}}{1} and to the
+other score vectors (Crossa et al. 2011, eq. 8-9), and finally
+\deqn{\sigma^2 \sim \frac{\nu S^2_0 + \mathrm{SSW} + B\sum_{ij}(\bar{y}_{ij} - \hat{y}_{ij})^2}{\chi^2_{\nu +
+  n}},}{sigma^2 ~ (nu s0^2 + SSW + B sum (y_ij - fit_ij)^2) / chi^2(nu + n),}
+with SSW the within-cell sum of squares. The chains start at the least-squares AMMI fit (the first chain) or at
+dispersed values (the others).
+
+\strong{A variance for every environment} (\code{.het = TRUE}): \eqn{e_{ijl} \sim N(0, \sigma^2_j)}{e_ijl ~ N(0,
+sigma_j^2)} with independent priors \eqn{\mathrm{Inv}\textrm{-}\chi^2(\nu, S^2_{0j})}{Inv-chi^2(nu, s0_j^2)}.
+With weights \eqn{w_j = 1/\sigma^2_j}{w_j = 1 / sigma_j^2} the genotype effects keep a closed normal
+conditional (precision \eqn{B\sum_j w_j}{B sum w_j}); the overall mean and the environment effects are drawn
+jointly; \eqn{\lambda_k}{lambda_k} has precision \eqn{B\sum_j w_j\gamma_{jk}^2}{B sum w_j gamma_jk^2}; the
+genotype scores stay von Mises-Fisher; the environment scores have the Bingham-von Mises-Fisher conditional
+\deqn{p(\boldsymbol{\gamma}_k \mid \cdot) \propto \exp\left(B\lambda_k\sum_j w_j\gamma_{jk}r_{\cdot jk} -
+  \frac{B\lambda_k^2}{2}\sum_j w_j\gamma_{jk}^2\right),}{p(gamma_k | .) ~ exp(B lambda_k sum_j w_j gamma_jk r_jk -
+  B lambda_k^2 / 2 sum_j w_j gamma_jk^2),}
+(\eqn{r_{\cdot jk} = \sum_i\alpha_{ik}r_{ijk}}{r_jk = sum_i alpha_ik r_ijk} with \eqn{r_{ijk}}{r_ijk} the cell
+residual without term \eqn{k}{k}), drawn by a Gibbs sweep in the eigenbasis of its quadratic term (Hoff 2009);
+every \eqn{\sigma^2_j}{sigma_j^2} is a scaled inverse chi-square with \eqn{\nu + BG}{nu + BG} degrees of freedom.
+
+\strong{GGE model} (\code{.model = "GGE"}): \eqn{y_{ijl} = \mu + \delta_j + \sum_k\lambda_k\alpha_{ik}\gamma_{jk}
++ e_{ijl}}{y_ijl = mu + delta_j + sum_k lambda_k alpha_ik gamma_jk + e_ijl}: the genotype main effect is part of the
+multiplicative terms, the genotype scores are orthogonal to \eqn{\mathbf{1}}{1}, the environment scores only to
+each other (Perez-Elizalde et al. 2012). The conditional distributions are those above without
+\eqn{\boldsymbol{\tau}}{tau} and without the constraint \eqn{\boldsymbol{\gamma}_k \perp \mathbf{1}}{gamma_k
+orthogonal to 1}.
+
+\strong{Unbalanced trials.} Missing plots and whole missing genotype-environment cells are completed by data
+augmentation: with \eqn{B}{B} the largest number of replicates of a cell, every iteration first draws the missing
+plots from \eqn{N(\eta_{ij}, \sigma^2_j)}{N(eta_ij, sigma_j^2)}, then the conditional distributions of the balanced
+design apply exactly (the plots are assumed missing at random). Every genotype and every environment needs some
+data.
+
+\strong{Model choice.} With \code{.waic = TRUE} the sampler accumulates the pointwise log-likelihood of the observed
+plots, giving WAIC; the deviance of every kept draw gives DIC (component \code{fit}; \code{\link{bam_compare}()}).
+
+\strong{Signs.} The pair \eqn{(\boldsymbol{\alpha}_k, \boldsymbol{\gamma}_k)}{(alpha_k, gamma_k)} and its
+negative give the same model. With \code{.align = TRUE} (default) every draw takes the sign that agrees with the
+least-squares vectors, so that posterior means and HPD regions refer to one orientation of each axis; with
+\code{.align = FALSE} a weak axis can switch sign during the run and its posterior means shrink towards zero.
+
+\strong{Changes from the earlier versions.} The singular values were computed once and never sampled; the error
+variance was not returned (\code{tau1} held the constant precision of the least-squares fit); the residuals for
+\eqn{\sigma^2}{sigma^2} were computed against the wrong environments; the within-cell sum of squares was a sum of
+variances; the covariance matrices of the main effects were square roots of variances; the scores were not drawn
+from their constrained conditional distributions; all \eqn{\min(G, E) - 1}{min(G, E) - 1} axes were fitted.
+\code{tau1} now holds the draws of the error variance \eqn{\sigma^2}{sigma^2}.
 }
 \examples{
-
 data(Maiz)
-
 fm1 <-
- bayes_ammi(
-     .data  = Maiz
-   , .y     = y
-   , .gen   = entry
-   , .env   = site
-   , .rep   = rep
-   , .nIter = 20
-  )
-names(fm1)
-fm1$mu1
-fm1$tau1
-fm1$tao1
-fm1$delta1
-fm1$lambdas1
-fm1$alphas1
-fm1$gammas1
-
-library(ggplot2)
-
-Plot1Mu <-
-  ggplot(data = fm1$mu1, mapping = aes(x = 1:nrow(fm1$mu1), y = mu)) +
-  geom_line(color = "blue") +
-  scale_x_continuous(labels = scales::comma) +
-  scale_y_continuous(labels = scales::comma) +
-  labs(y = expression(mu), x = "Iterations") +
-  theme_bw()
-print(Plot1Mu)
-
-Plot2Mu <-
-  ggplot(data = fm1$mu1, mapping = aes(mu)) +
-  geom_histogram() +
-  scale_x_continuous(labels = scales::comma) +
-  scale_y_continuous(labels = scales::comma) +
-  labs(y = "Frequency", x = expression(mu)) +
-  theme_bw()
-print(Plot2Mu)
-
-
-Plot1Sigma2 <-
-  ggplot(data = fm1$tau1, mapping = aes(x = 1:nrow(fm1$tau1), y = tau)) +
-  geom_line(color = "blue") +
-  scale_x_continuous(labels = scales::comma) +
-  scale_y_continuous(labels = scales::comma) +
-  labs(y = expression(sigma^2), x = "Iterations") +
-  theme_bw()
-print(Plot1Sigma2)
-
-
-Plot2Sigma2 <-
-  ggplot(data = fm1$tau1, mapping = aes(tau)) +
-  geom_histogram() +
-  scale_x_continuous(labels = scales::comma) +
-  scale_y_continuous(labels = scales::comma) +
-  labs(y = "Frequency", x = expression(sigma^2)) +
-  theme_bw()
-print(Plot2Sigma2)
-
-
-# Plot of Alphas
-Plot1Alpha1 <-
-  ggplot(data = fm1$tao1, mapping = aes(x = 1:nrow(fm1$tao1), y = tao1)) +
-  geom_line(color = "blue") +
-  scale_x_continuous(labels = scales::comma) +
-  scale_y_continuous(labels = scales::comma) +
-  labs(y = expression(alpha[1]), x = "Iterations") +
-  theme_bw()
-print(Plot1Alpha1)
-
-Plot2Alpha1 <-
-  ggplot(data = fm1$tao1, mapping = aes(tao1)) +
-  geom_histogram() +
-  scale_x_continuous(labels = scales::comma) +
-  scale_y_continuous(labels = scales::comma) +
-  labs(y = "Frequency", x = expression(alpha[1])) +
-  theme_bw()
-print(Plot2Alpha1)
-
-Plot1Alpha2 <-
-  ggplot(data = fm1$tao1, mapping = aes(x = 1:nrow(fm1$tao1), y = tao2)) +
-  geom_line(color = "blue") +
-  scale_x_continuous(labels = scales::comma) +
-  scale_y_continuous(labels = scales::comma) +
-  labs(y = expression(alpha[2]), x = "Iterations") +
-  theme_bw()
-print(Plot1Alpha2)
-
-Plot2Alpha2 <-
-  ggplot(data = fm1$tao1, mapping = aes(tao2)) +
-  geom_histogram() +
-  scale_x_continuous(labels = scales::comma) +
-  scale_y_continuous(labels = scales::comma) +
-  labs(y = "Frequency", x = expression(alpha[2])) +
-  theme_bw()
-print(Plot2Alpha2)
-
-# Plot of Betas
-Plot1Beta1 <-
-  ggplot(data = fm1$delta1, mapping = aes(x = 1:nrow(fm1$delta1), y = delta1)) +
-  geom_line(color = "blue") +
-  scale_x_continuous(labels = scales::comma) +
-  scale_y_continuous(labels = scales::comma) +
-  labs(y = expression(beta[1]), x = "Iterations") +
-  theme_bw()
-print(Plot1Beta1)
-
-Plot2Beta1 <-
-  ggplot(data = fm1$delta1, mapping = aes(delta1)) +
-  geom_histogram() +
-  scale_x_continuous(labels = scales::comma) +
-  scale_y_continuous(labels = scales::comma) +
-  labs(y = "Frequency", x = expression(beta[1])) +
-  theme_bw()
-print(Plot2Beta1)
-
-
-Plot1Beta2 <-
-  ggplot(data = fm1$delta1, mapping = aes(x = 1:nrow(fm1$delta1), y = delta2)) +
-  geom_line(color = "blue") +
-  scale_x_continuous(labels = scales::comma) +
-  scale_y_continuous(labels = scales::comma) +
-  labs(y = expression(beta[2]), x = "Iterations") +
-  theme_bw()
-print(Plot1Beta2)
-
-Plot2Beta2 <-
-  ggplot(data = fm1$delta1, mapping = aes(delta2)) +
-  geom_histogram() +
-  scale_x_continuous(labels = scales::comma) +
-  scale_y_continuous(labels = scales::comma) +
-  labs(y = "Frequency", x = expression(beta[2])) +
-  theme_bw()
-print(Plot2Beta2)
-
-
-Plot1Beta3 <-
-  ggplot(data = fm1$delta1, mapping = aes(x = 1:nrow(fm1$delta1), y = delta3)) +
-  geom_line(color = "blue") +
-  scale_x_continuous(labels = scales::comma) +
-  scale_y_continuous(labels = scales::comma) +
-  labs(y = expression(beta[3]), x = "Iterations") +
-  theme_bw()
-print(Plot1Beta3)
-
-Plot2Beta3 <-
-  ggplot(data = fm1$delta1, mapping = aes(delta3)) +
-  geom_histogram() +
-  scale_x_continuous(labels = scales::comma) +
-  scale_y_continuous(labels = scales::comma) +
-  labs(y = "Frequency", x = expression(beta[3])) +
-  theme_bw()
-print(Plot2Beta3)
-
-
-BiplotAMMI <-
-  ggplot(data = fm1$alphas0, mapping = aes(x = alphas1, y = alphas2)) +
-  geom_point() +
-  geom_hline(yintercept = 0) +
-  geom_vline(xintercept = 0) +
-  geom_text(aes(label = 1:nrow(fm1$alphas0)),
-            vjust = "inward", hjust = "inward") +
-  geom_point(data = fm1$gammas0, mapping = aes(x = gammas1, y = gammas2)) +
-  geom_segment(data = fm1$gammas0,
-               aes(x = 0, y = 0, xend = gammas1, yend = gammas2),
-               arrow = arrow(length = unit(0.2, "cm"))
-               , alpha = 0.75, color = "red") +
-  geom_text(data = fm1$gammas0,
-            aes(x = gammas1, y = gammas2,
-                label = paste0("E", 1:nrow(fm1$gammas0))),
-            vjust = "inward", hjust = "inward") +
-  scale_x_continuous(
-    limits = c(-max(abs(c(range(fm1$alphas0[, 1:2], fm1$gammas0[, 1:2]))))
-               , max(abs(c(range(fm1$alphas0[, 1:2], fm1$gammas0[, 1:2])))))) +
-  scale_y_continuous(
-    limits = c(-max(abs(c(range(fm1$alphas0[, 1:2], fm1$gammas0[, 1:2]))))
-               , max(abs(c(range(fm1$alphas0[, 1:2], fm1$gammas0[, 1:2])))))) +
-  labs(title = "MCO Method", x = expression(PC[1]), y = expression(PC[2])) +
-  theme_bw() +
-  theme(plot.title = element_text(hjust = 0.5))
-
-print(BiplotAMMI)
-
-
-BiplotBayesAMMI <-
-  ggplot(data = fm1$alphas1, mapping = aes(x = alphas1, y = alphas2)) +
-  geom_point() +
-  geom_hline(yintercept = 0) +
-  geom_vline(xintercept = 0) +
-  geom_text(aes(label = 1:nrow(fm1$alphas1)),
-            vjust = "inward", hjust = "inward") +
-  geom_point(data = fm1$gammas1, mapping = aes(x = gammas1, y = gammas2)) +
-  geom_segment(data = fm1$gammas1,
-               aes(x = 0, y = 0, xend = gammas1, yend = gammas2),
-               arrow = arrow(length = unit(0.2, "cm"))
-               , alpha = 0.75, color = "red") +
-  geom_text(data = fm1$gammas1,
-            aes(x = gammas1, y = gammas2,
-                label = paste0("E", 1:nrow(fm1$gammas1))),
-            vjust = "inward", hjust = "inward") +
-  scale_x_continuous(
-    limits = c(-max(abs(c(range(fm1$alphas1[, 1:2], fm1$gammas1[, 1:2]))))
-               , max(abs(c(range(fm1$alphas1[, 1:2], fm1$gammas1[, 1:2])))))) +
-  scale_y_continuous(
-    limits = c(-max(abs(c(range(fm1$alphas1[, 1:2], fm1$gammas1[, 1:2]))))
-               , max(abs(c(range(fm1$alphas1[, 1:2], fm1$gammas1[, 1:2])))))) +
-  labs(title = "Bayesian Method", x = expression(PC[1]), y = expression(PC[2])) +
-  theme_bw() +
-  theme(plot.title = element_text(hjust = 0.5))
-
-print(BiplotBayesAMMI)
-
-
+  bayes_ammi(
+      .data   = Maiz
+    , .y      = y
+    , .gen    = entry
+    , .env    = site
+    , .rep    = rep
+    , .nIter  = 200
+    , .k      = 2
+    , .burnin = 50
+    , .thin   = 1
+    , .chains = 1
+    , .priors = bam_priors(
+          mu_mean     = 0
+        , mu_var      = 1e+8
+        , tau_mean    = 0
+        , tau_var     = 1e+8
+        , delta_mean  = 0
+        , delta_var   = 1e+8
+        , lambda_mean = 0
+        , lambda_var  = 1e+8
+        , nu          = 1
+        , s2          = NULL
+        )
+    , .level  = 0.95
+    , .seed   = 1
+    , .align  = TRUE
+    , .model  = "AMMI"
+    , .het    = FALSE
+    , .waic   = TRUE
+    )
+fm1
+head(fm1$summary)
+fm1$fit$WAIC
+plot(x = fm1, which = "trace")
+plot(x = fm1, which = "biplot")
 }
 \references{
-Crossa, J., Perez-Elizalde, S., Jarquin, D., Cotes, J.M., Viele, K., Liu, G., and Cornelius, P.L. (2011)
- Bayesian Estimation of the Additive Main Effects and Multiplicative Interaction Model
- \emph{Crop Science}, \strong{51}, 1458–1469.
- (\href{https://acsess.onlinelibrary.wiley.com/doi/abs/10.2135/cropsci2010.06.0343}{doi: 10.2135/cropsci2010.06.0343})
+Crossa, J., Perez-Elizalde, S., Jarquin, D., Cotes, J. M., Viele, K., Liu, G. and Cornelius, P. L. (2011).
+Bayesian estimation of the additive main effects and multiplicative interaction model. \emph{Crop Science},
+\strong{51}(4), 1458--1469. \doi{10.2135/cropsci2010.06.0343}
+
+Viele, K. and Srinivasan, C. (2000). Parsimonious estimation of multiplicative interaction in analysis of variance
+using Kullback-Leibler information. \emph{Journal of Statistical Planning and Inference}, \strong{84}(1--2),
+201--219.
+
+Perez-Elizalde, S., Jarquin, D. and Crossa, J. (2012). A general Bayesian estimation method of linear-bilinear
+models applied to plant breeding trials with genotype x environment interaction. \emph{Journal of Agricultural,
+Biological, and Environmental Statistics}, \strong{17}, 15--37. \doi{10.1007/s13253-011-0063-9}
+
+Hoff, P. D. (2009). Simulation of the matrix Bingham-von Mises-Fisher distribution, with applications to
+multivariate and relational data. \emph{Journal of Computational and Graphical Statistics}, \strong{18}(2),
+438--456. \doi{10.1198/jcgs.2009.07177}
+
+Wood, A. T. A. (1994). Simulation of the von Mises Fisher distribution. \emph{Communications in Statistics -
+Simulation and Computation}, \strong{23}(1), 157--164.
+}
+\seealso{
+\code{\link{biplots}}, \code{\link{bam_priors}}, \code{\link{bam_interpret}}, \code{\link{ge_ammi}}
 }
 \author{
-\enumerate{
-    \item Muhammad Yaseen (\email{myaseen208@gmail.com})
-    \item Jose Crossa (\email{j.crossa@cgiar.org})
-    \item Sergio Perez-Elizalde (\email{sergiop@colpos.mx})
-    \item Diego Jarquin (\email{diego.jarquin@gmail.com})
-    \item Jose Miguel Cotes
-    \item Kert Viele
-    \item Genzhou Liu
-    \item Paul L. Cornelius
-   }
+Muhammad Yaseen (\email{myaseen208@gmail.com}), Jose Crossa (\email{j.crossa@cgiar.org}), Sergio
+  Perez-Elizalde (\email{sergiop@colpos.mx}), Diego Jarquin (\email{diego.jarquin@gmail.com}), Jose Miguel
+  Cotes, Kert Viele, Genzhou Liu, Paul L. Cornelius
 }
